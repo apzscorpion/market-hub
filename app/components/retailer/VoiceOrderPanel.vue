@@ -8,7 +8,7 @@ const emit = defineEmits<{
 }>()
 
 const productStore = useProductStore()
-const { isListening, isSupported, transcript, interimTranscript, confidence, error, start, stop, reset } = useSpeechRecognition()
+const { isListening, isSupported, transcript, interimTranscript, confidence, error, allAlternatives, start, stop, reset } = useSpeechRecognition()
 
 const selectedLang = ref<'en' | 'ml'>('ml')
 const parsedItems = ref<ParsedOrderItem[]>([])
@@ -24,7 +24,7 @@ watch(transcript, (val) => {
     return
   }
 
-  parsedItems.value = parseVoiceOrder(val, productStore.products)
+  parsedItems.value = parseVoiceOrder(val, productStore.products, allAlternatives.value)
   showPreview.value = parsedItems.value.length > 0
 })
 

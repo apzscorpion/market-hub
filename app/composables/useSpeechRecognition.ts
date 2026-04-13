@@ -12,6 +12,7 @@ export function useSpeechRecognition() {
   const interimTranscript = ref('')
   const confidence = ref(0)
   const error = ref<string | null>(null)
+  const allAlternatives = ref<string[]>([])
 
   let recognition: any = null
 
@@ -24,7 +25,7 @@ export function useSpeechRecognition() {
     recognition = new SpeechRecognition()
     recognition.continuous = true
     recognition.interimResults = true
-    recognition.maxAlternatives = 1
+    recognition.maxAlternatives = 5
 
     recognition.onresult = (event: any) => {
       let interim = ''
@@ -33,6 +34,14 @@ export function useSpeechRecognition() {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i]
         if (result.isFinal) {
+          // Collect all alternatives for better matching
+          const alternatives: string[] = []
+          for (let a = 0; a < result.length; a++) {
+            alternatives.push(result[a].transcript)
+          }
+          // Store alternatives for the voice parser to use
+          allAlternatives.value = alternatives
+
           final += result[0].transcript
           confidence.value = result[0].confidence
         }
@@ -72,6 +81,7 @@ export function useSpeechRecognition() {
     interimTranscript.value = ''
     confidence.value = 0
     error.value = null
+    allAlternatives.value = []
 
     setLanguage(lang)
 
@@ -96,6 +106,7 @@ export function useSpeechRecognition() {
     interimTranscript.value = ''
     confidence.value = 0
     error.value = null
+    allAlternatives.value = []
   }
 
   onUnmounted(() => {
@@ -109,6 +120,7 @@ export function useSpeechRecognition() {
     interimTranscript,
     confidence,
     error,
+    allAlternatives,
     start,
     stop,
     reset,

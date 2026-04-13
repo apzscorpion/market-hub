@@ -108,19 +108,45 @@ function parseSegment(segment: string, products: Product[]): ParsedOrderItem {
   const matches = matchProducts(productQuery, products)
   const bestMatch = matches[0] || null
 
+  // Confidence: score 0 = 100%, score 7 = ~0%
+  const confidence = bestMatch?.score != null
+    ? Math.max(0, Math.min(1, 1 - (bestMatch.score / 7)))
+    : 0
+
   return {
     raw: segment,
     quantity,
     productQuery,
     matchedProduct: bestMatch?.product ?? null,
-    confidence: bestMatch?.score != null ? Math.max(0, 1 - bestMatch.score * 0.15) : 0,
+    confidence,
   }
 }
 
-export function parseVoiceOrder(text: string, products: Product[]): ParsedOrderItem[] {
+export function parseVoiceOrder(text: string, products: Product[], alternatives?: string[]): ParsedOrderItem[] {
   if (!text.trim()) return []
   const segments = splitIntoSegments(text)
-  return segments.map(seg => parseSegment(seg, products))
+  const items = segments.map(seg => parseSegment(seg, products))
+
+  // If any item has no match or low confidence, try alternatives
+  if (alternatives && alternatives.length > 1) {
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].matchedProduct && items[i].confidence >= 0.5) continue
+
+      // Try each alternative transcript for this segment
+      for (const alt of alternatives.slice(1)) {
+        const altSegments = splitIntoSegments(alt)
+        if (altSegments.length > i) {
+          const altItem = parseSegment(altSegments[i], products)
+          if (altItem.matchedProduct && altItem.confidence > items[i].confidence) {
+            items[i] = altItem
+            break
+          }
+        }
+      }
+    }
+  }
+
+  return items
 }
 
 // Voice command detection
