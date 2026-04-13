@@ -25,7 +25,7 @@ export function useOrders() {
     const orderItems = items.map(item => ({
       productId: item.productId,
       productName: item.productName,
-      nickname: item.nickname,
+      nickname: item.nickname || '',
       quantity: item.quantity,
       unitType: item.unitType,
       price: item.price,
@@ -34,11 +34,11 @@ export function useOrders() {
 
     const totalAmount = orderItems.reduce((sum, item) => sum + item.lineTotal, 0)
 
-    const orderData = {
+    // Build order data — ensure NO undefined values (Firestore rejects them)
+    const orderData: Record<string, any> = {
       retailerId: user.id,
-      retailerName: user.name,
+      retailerName: user.name || '',
       retailerEmail: user.email || '',
-      ...(user.phone ? { retailerPhone: user.phone } : {}),
       items: orderItems,
       status: 'pending' as OrderStatus,
       totalAmount,
@@ -52,6 +52,9 @@ export function useOrders() {
         changedBy: user.id,
         changedAt: new Date(),
       }],
+    }
+    if (user.phone) {
+      orderData.retailerPhone = user.phone
     }
 
     const docRef = await addDoc(collection($firebaseDb, 'orders'), orderData)
