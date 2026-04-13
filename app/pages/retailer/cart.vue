@@ -66,29 +66,31 @@ async function handlePlaceOrder(): Promise<void> {
         <div
           v-for="item in cartStore.items"
           :key="item.productId"
-          class="p-4 flex items-center justify-between"
+          class="p-3 sm:p-4 space-y-2"
         >
-          <div class="flex-1 min-w-0">
-            <h3 class="font-medium text-sm text-gray-900">{{ item.nickname || item.productName }}</h3>
-            <p class="text-xs text-gray-500">{{ formatPrice(item.price) }} / {{ item.unitType }}</p>
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <h3 class="font-medium text-sm text-gray-900">{{ item.nickname || item.productName }}</h3>
+              <p class="text-xs text-gray-500">{{ formatPrice(item.price) }} / {{ item.unitType }}</p>
+            </div>
+            <button
+              class="text-gray-300 hover:text-red-500 transition-colors shrink-0 p-1"
+              @click="cartStore.removeItem(item.productId)"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <div class="flex items-center gap-4">
+          <div class="flex items-center justify-between">
             <CommonQuantityControl
               :quantity="item.quantity"
               :min="0"
               @update:quantity="(qty: number) => qty === 0 ? cartStore.removeItem(item.productId) : cartStore.updateQuantity(item.productId, qty)"
             />
-            <span class="text-sm font-medium text-gray-900 w-20 text-right">
+            <span class="text-sm font-semibold text-gray-900">
               {{ formatPrice(item.quantity * item.price) }}
             </span>
-            <button
-              class="text-gray-400 hover:text-red-500 transition-colors"
-              @click="cartStore.removeItem(item.productId)"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Product } from '~/types/product'
 import type { Order } from '~/types/order'
+import type { ParsedOrderItem } from '~/utils/voiceParser'
 
 definePageMeta({ layout: 'retailer' })
 
@@ -20,6 +21,31 @@ const submitting = ref(false)
 const notes = ref('')
 const showReorderConfirm = ref(false)
 const pendingReorder = ref<Order | null>(null)
+const showVoicePanel = ref(false)
+
+function onVoiceItemsParsed(items: ParsedOrderItem[]): void {
+  for (const item of items) {
+    if (!item.matchedProduct) continue
+    const existing = rows.value.find(r => r.productId === item.matchedProduct!.id)
+    if (existing) {
+      updateQuantity(existing.id, existing.quantity + item.quantity)
+    }
+    else {
+      addQuickItem(item.matchedProduct)
+      const added = rows.value.find(r => r.productId === item.matchedProduct!.id)
+      if (added) updateQuantity(added.id, item.quantity)
+    }
+  }
+}
+
+function onVoiceCommand(cmd: 'confirm' | 'cancel'): void {
+  if (cmd === 'confirm' && !isEmpty.value) {
+    submitOrder()
+  }
+  else if (cmd === 'cancel') {
+    clearTable()
+  }
+}
 
 onMounted(async () => {
   await Promise.all([fetchProducts(), fetchMyOrders()])
@@ -81,7 +107,26 @@ async function submitOrder(): Promise<void> {
 
 <template>
   <div class="space-y-4">
-    <h2 class="text-xl font-semibold text-gray-900">New Order</h2>
+    <div class="flex items-center justify-between">
+      <h2 class="text-xl font-semibold text-gray-900">New Order</h2>
+      <button
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors"
+        :class="showVoicePanel ? 'bg-red-50 border-red-200 text-red-700' : 'bg-blue-50 border-blue-200 text-blue-700'"
+        @click="showVoicePanel = !showVoicePanel"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+        </svg>
+        {{ showVoicePanel ? 'Hide Voice' : 'Voice Order' }}
+      </button>
+    </div>
+
+    <!-- Voice Panel -->
+    <RetailerVoiceOrderPanel
+      v-if="showVoicePanel"
+      @items-parsed="onVoiceItemsParsed"
+      @command="onVoiceCommand"
+    />
 
     <!-- Frequent Items -->
     <RetailerFrequentItems

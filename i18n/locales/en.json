@@ -4,14 +4,17 @@
     "loading": "Loading..."
   },
   "auth": {
-    "login": "Login",
-    "phone": "Phone Number",
-    "otp": "Enter OTP",
-    "send_otp": "Send OTP",
-    "verify": "Verify",
-    "change_phone": "Change phone number",
+    "login": "Sign in to your account",
+    "email": "Email Address",
+    "password": "Password",
+    "sign_in": "Sign In",
+    "google_sign_in": "Sign in with Google",
+    "or": "or",
     "logout": "Logout",
-    "no_account": "Contact your wholesaler to get access."
+    "no_account": "Contact your wholesaler to get access.",
+    "error_invalid": "Invalid email or password.",
+    "error_not_found": "No account found with this email.",
+    "error_too_many": "Too many attempts. Please try again later."
   },
   "nav": {
     "products": "Products",

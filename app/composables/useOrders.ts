@@ -1,6 +1,6 @@
 import {
   collection, getDocs, getDoc, query, where, orderBy,
-  addDoc, updateDoc, doc, serverTimestamp, arrayUnion,
+  addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc,
 } from 'firebase/firestore'
 import type { Order, OrderStatus } from '~/types/order'
 import type { CartItem } from '~/types/cart'
@@ -54,6 +54,36 @@ export function useOrders() {
     }
 
     const docRef = await addDoc(collection($firebaseDb, 'orders'), orderData)
+
+    // Check if auto-accept is enabled
+    try {
+      const configDoc = await getDoc(doc($firebaseDb, 'systemSettings', 'config'))
+      if (configDoc.exists() && configDoc.data().autoAcceptOrders) {
+        await updateDoc(doc($firebaseDb, 'orders', docRef.id), {
+          status: 'accepted',
+          updatedAt: serverTimestamp(),
+          statusHistory: arrayUnion({
+            status: 'accepted',
+            changedBy: 'system',
+            changedAt: new Date(),
+            note: 'Auto-accepted',
+          }),
+        })
+        // Auto-generate invoice
+        try {
+          const { generateInvoice } = useInvoice()
+          const order = await getOrder(docRef.id)
+          await generateInvoice(order)
+        }
+        catch (e) {
+          console.error('[useOrders] Auto-invoice failed:', e)
+        }
+      }
+    }
+    catch (e) {
+      console.error('[useOrders] Auto-accept check failed:', e)
+    }
+
     return docRef.id
   }
 
@@ -150,6 +180,53 @@ export function useOrders() {
     }
   }
 
+  async function bulkUpdateStatus(orderIds: string[], newStatus: OrderStatus): Promise<{ success: number, failed: number }> {
+    let success = 0
+    let failed = 0
+    for (const id of orderIds) {
+      try {
+        await updateOrderStatus(id, newStatus)
+        success++
+      }
+      catch {
+        failed++
+      }
+    }
+    await fetchAllOrders()
+    return { success, failed }
+  }
+
+  async function assignDelivery(orderId: string, deliveryId: string, deliveryName: string): Promise<void> {
+    await updateDoc(doc($firebaseDb, 'orders', orderId), {
+      assignedDeliveryId: deliveryId,
+      assignedDeliveryName: deliveryName,
+      updatedAt: serverTimestamp(),
+    })
+  }
+
+  async function fetchDeliveryOrders(): Promise<void> {
+    const user = authStore.user
+    if (!user) return
+
+    orderStore.setLoading(true)
+    try {
+      const q = query(
+        collection($firebaseDb, 'orders'),
+        where('assignedDeliveryId', '==', user.id),
+        orderBy('createdAt', 'desc'),
+      )
+      const snapshot = await getDocs(q)
+      const orders: Order[] = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Order[]
+      orderStore.setMyOrders(orders)
+    }
+    catch (e) {
+      orderStore.setError((e as Error).message)
+    }
+    finally {
+      orderStore.setLoading(false)
+    }
+  }
+
   return {
     myOrders: computed(() => orderStore.myOrders),
     allOrders: computed(() => orderStore.allOrders),
@@ -160,6 +237,9 @@ export function useOrders() {
     fetchAllOrders,
     getOrder,
     updateOrderStatus,
+    bulkUpdateStatus,
+    assignDelivery,
+    fetchDeliveryOrders,
     allowedTransitions,
   }
 }

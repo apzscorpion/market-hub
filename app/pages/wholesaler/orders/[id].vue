@@ -7,7 +7,12 @@ definePageMeta({
 })
 
 const route = useRoute()
-const { getOrder } = useOrders()
+const { showSuccess, showError } = useToast()
+const { getOrder, assignDelivery } = useOrders()
+const { deliveryPersonnel, fetchUsers } = useUserAdmin()
+
+const selectedDeliveryId = ref('')
+const assigning = ref(false)
 
 const order = ref<Awaited<ReturnType<typeof getOrder>> | null>(null)
 const loading = ref(true)
@@ -35,7 +40,25 @@ function handleStatusChanged(newStatus: OrderStatus): void {
   }
 }
 
-onMounted(loadOrder)
+async function handleAssignDelivery(): Promise<void> {
+  if (!order.value || !selectedDeliveryId.value || assigning.value) return
+  const person = deliveryPersonnel.value.find(u => u.id === selectedDeliveryId.value)
+  if (!person) return
+
+  assigning.value = true
+  try {
+    await assignDelivery(order.value.id, person.id, person.name)
+    showSuccess(`Assigned to ${person.name}`)
+    loadOrder()
+  }
+  catch { showError('Failed to assign') }
+  finally { assigning.value = false }
+}
+
+onMounted(() => {
+  loadOrder()
+  fetchUsers()
+})
 </script>
 
 <template>
@@ -62,7 +85,7 @@ onMounted(loadOrder)
     <!-- Order Detail -->
     <div v-else-if="order" class="space-y-6">
       <!-- Header -->
-      <div class="bg-white rounded-lg border border-gray-200 p-6">
+      <div class="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
         <div class="flex items-start justify-between">
           <div>
             <h2 class="text-lg font-semibold text-gray-900">Order #{{ order.id.slice(0, 12) }}</h2>
@@ -130,6 +153,29 @@ onMounted(loadOrder)
         <p v-if="order.status === 'delivered' || order.status === 'cancelled'" class="text-sm text-gray-500">
           No actions available — order is {{ order.status }}.
         </p>
+      </div>
+
+      <!-- Delivery Assignment -->
+      <div v-if="order.status === 'accepted' || order.status === 'shipped'" class="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">Delivery Assignment</h3>
+        <div v-if="order.assignedDeliveryName" class="text-sm text-gray-700 mb-2">
+          Currently assigned to: <span class="font-medium">{{ order.assignedDeliveryName }}</span>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <select v-model="selectedDeliveryId" class="flex-1 px-3 py-2 text-sm border rounded-lg">
+            <option value="">Select delivery person...</option>
+            <option v-for="person in deliveryPersonnel" :key="person.id" :value="person.id">
+              {{ person.name }} ({{ person.phone }})
+            </option>
+          </select>
+          <button
+            :disabled="!selectedDeliveryId || assigning"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            @click="handleAssignDelivery"
+          >
+            {{ assigning ? 'Assigning...' : 'Assign' }}
+          </button>
+        </div>
       </div>
 
       <!-- Invoice link -->
