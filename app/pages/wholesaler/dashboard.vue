@@ -35,6 +35,11 @@ function refresh(): void {
       </button>
     </div>
 
+    <!-- Quick Order Entry -->
+    <div class="mb-6">
+      <WholesalerVoiceOrderEntry @order-created="refresh" />
+    </div>
+
     <WholesalerOrderStats :orders="allOrders" />
 
     <div class="flex items-center justify-between mb-4">
