@@ -49,6 +49,8 @@ service cloud.firestore {
       allow update: if isAuth() && (
         isWholesaler()
         || (isDelivery() && resource.data.assignedDeliveryId == request.auth.uid)
+        || (isRetailer() && resource.data.retailerId == request.auth.uid
+            && request.resource.data.status == 'delivered')
       );
       allow delete: if false;
     }

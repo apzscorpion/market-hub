@@ -1,10 +1,15 @@
 import {
   collection, getDocs, getDoc, query, where, orderBy,
   addDoc, updateDoc, doc, serverTimestamp, arrayUnion, setDoc,
+  onSnapshot, type Unsubscribe,
 } from 'firebase/firestore'
 import type { Order, OrderStatus } from '~/types/order'
 import type { CartItem } from '~/types/cart'
 
+// Status transition rules:
+// - Wholesaler can: accept, cancel, ship, mark delivered
+// - Delivery can: mark shipped (picked up), mark delivered
+// - Retailer can: confirm delivery (mark delivered)
 const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
   pending: ['accepted', 'cancelled'],
   accepted: ['shipped', 'cancelled'],
@@ -13,10 +18,22 @@ const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
   cancelled: [],
 }
 
+// Who can transition to which status
+const roleTransitions: Record<string, OrderStatus[]> = {
+  wholesaler: ['accepted', 'shipped', 'delivered', 'cancelled'],
+  delivery: ['shipped', 'delivered'],
+  retailer: ['delivered'],
+}
+
 export function useOrders() {
   const { $firebaseDb } = useNuxtApp()
   const orderStore = useOrderStore()
   const authStore = useAuthStore()
+
+  // Track active listeners for cleanup
+  let myOrdersUnsub: Unsubscribe | null = null
+  let allOrdersUnsub: Unsubscribe | null = null
+  let deliveryOrdersUnsub: Unsubscribe | null = null
 
   async function placeOrder(items: CartItem[], notes?: string): Promise<string> {
     const user = authStore.user
@@ -91,58 +108,116 @@ export function useOrders() {
     return docRef.id
   }
 
-  async function fetchMyOrders(): Promise<void> {
+  // Real-time listener for retailer's own orders
+  function subscribeMyOrders(): void {
     const user = authStore.user
     if (!user) return
 
+    // Clean up previous listener
+    if (myOrdersUnsub) myOrdersUnsub()
+
     orderStore.setLoading(true)
     orderStore.setError(null)
-    try {
-      const q = query(
-        collection($firebaseDb, 'orders'),
-        where('retailerId', '==', user.id),
-        orderBy('createdAt', 'desc'),
-      )
-      const snapshot = await getDocs(q)
-      const orders: Order[] = snapshot.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-      })) as Order[]
-      orderStore.setMyOrders(orders)
-    }
-    catch (e) {
-      const message = (e as Error).message
-      console.error('[useOrders] Failed to fetch my orders:', message)
-      orderStore.setError(message)
-    }
-    finally {
-      orderStore.setLoading(false)
-    }
+
+    const q = query(
+      collection($firebaseDb, 'orders'),
+      where('retailerId', '==', user.id),
+      orderBy('createdAt', 'desc'),
+    )
+
+    myOrdersUnsub = onSnapshot(q,
+      (snapshot) => {
+        const orders: Order[] = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data(),
+        })) as Order[]
+        orderStore.setMyOrders(orders)
+        orderStore.setLoading(false)
+      },
+      (error) => {
+        console.error('[useOrders] Real-time my orders error:', error.message)
+        orderStore.setError(error.message)
+        orderStore.setLoading(false)
+      },
+    )
+  }
+
+  // Real-time listener for all orders (wholesaler)
+  function subscribeAllOrders(): void {
+    // Clean up previous listener
+    if (allOrdersUnsub) allOrdersUnsub()
+
+    orderStore.setLoading(true)
+    orderStore.setError(null)
+
+    const q = query(
+      collection($firebaseDb, 'orders'),
+      orderBy('createdAt', 'desc'),
+    )
+
+    allOrdersUnsub = onSnapshot(q,
+      (snapshot) => {
+        const orders: Order[] = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data(),
+        })) as Order[]
+        orderStore.setAllOrders(orders)
+        orderStore.setLoading(false)
+      },
+      (error) => {
+        console.error('[useOrders] Real-time all orders error:', error.message)
+        orderStore.setError(error.message)
+        orderStore.setLoading(false)
+      },
+    )
+  }
+
+  // Real-time listener for delivery person's orders
+  function subscribeDeliveryOrders(): void {
+    const user = authStore.user
+    if (!user) return
+
+    if (deliveryOrdersUnsub) deliveryOrdersUnsub()
+
+    orderStore.setLoading(true)
+
+    const q = query(
+      collection($firebaseDb, 'orders'),
+      where('assignedDeliveryId', '==', user.id),
+      orderBy('createdAt', 'desc'),
+    )
+
+    deliveryOrdersUnsub = onSnapshot(q,
+      (snapshot) => {
+        const orders: Order[] = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Order[]
+        orderStore.setMyOrders(orders)
+        orderStore.setLoading(false)
+      },
+      (error) => {
+        orderStore.setError(error.message)
+        orderStore.setLoading(false)
+      },
+    )
+  }
+
+  // Keep the old fetch functions as fallbacks
+  async function fetchMyOrders(): Promise<void> {
+    subscribeMyOrders()
   }
 
   async function fetchAllOrders(): Promise<void> {
-    orderStore.setLoading(true)
-    orderStore.setError(null)
-    try {
-      const q = query(
-        collection($firebaseDb, 'orders'),
-        orderBy('createdAt', 'desc'),
-      )
-      const snapshot = await getDocs(q)
-      const orders: Order[] = snapshot.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-      })) as Order[]
-      orderStore.setAllOrders(orders)
-    }
-    catch (e) {
-      const message = (e as Error).message
-      console.error('[useOrders] Failed to fetch all orders:', message)
-      orderStore.setError(message)
-    }
-    finally {
-      orderStore.setLoading(false)
-    }
+    subscribeAllOrders()
+  }
+
+  async function fetchDeliveryOrders(): Promise<void> {
+    subscribeDeliveryOrders()
+  }
+
+  // Cleanup all listeners
+  function unsubscribeAll(): void {
+    if (myOrdersUnsub) { myOrdersUnsub(); myOrdersUnsub = null }
+    if (allOrdersUnsub) { allOrdersUnsub(); allOrdersUnsub = null }
+    if (deliveryOrdersUnsub) { deliveryOrdersUnsub(); deliveryOrdersUnsub = null }
   }
 
   async function getOrder(orderId: string): Promise<Order> {
@@ -153,13 +228,20 @@ export function useOrders() {
 
   async function updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<void> {
     const order = await getOrder(orderId)
+    const user = authStore.user
+    if (!user) throw new Error('Not authenticated')
 
+    // Check if status transition is valid
     if (!allowedTransitions[order.status]?.includes(newStatus)) {
       throw new Error(`Cannot transition from ${order.status} to ${newStatus}`)
     }
 
-    const user = authStore.user
-    if (!user) throw new Error('Not authenticated')
+    // Check if user's role can make this transition
+    const userRole = user.role || 'retailer'
+    const allowed = roleTransitions[userRole] || []
+    if (!allowed.includes(newStatus)) {
+      throw new Error(`${userRole} cannot change order to ${newStatus}`)
+    }
 
     await updateDoc(doc($firebaseDb, 'orders', orderId), {
       status: newStatus,
@@ -167,6 +249,8 @@ export function useOrders() {
       statusHistory: arrayUnion({
         status: newStatus,
         changedBy: user.id,
+        changedByName: user.name || '',
+        changedByRole: userRole,
         changedAt: new Date(),
       }),
     })
@@ -179,7 +263,6 @@ export function useOrders() {
       }
       catch (e) {
         console.error('[useOrders] Failed to generate invoice:', e)
-        // Don't throw — the status change succeeded, invoice can be retried
       }
     }
   }
@@ -196,7 +279,7 @@ export function useOrders() {
         failed++
       }
     }
-    await fetchAllOrders()
+    // No need to refetch — real-time listener will update automatically
     return { success, failed }
   }
 
@@ -206,29 +289,6 @@ export function useOrders() {
       assignedDeliveryName: deliveryName,
       updatedAt: serverTimestamp(),
     })
-  }
-
-  async function fetchDeliveryOrders(): Promise<void> {
-    const user = authStore.user
-    if (!user) return
-
-    orderStore.setLoading(true)
-    try {
-      const q = query(
-        collection($firebaseDb, 'orders'),
-        where('assignedDeliveryId', '==', user.id),
-        orderBy('createdAt', 'desc'),
-      )
-      const snapshot = await getDocs(q)
-      const orders: Order[] = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Order[]
-      orderStore.setMyOrders(orders)
-    }
-    catch (e) {
-      orderStore.setError((e as Error).message)
-    }
-    finally {
-      orderStore.setLoading(false)
-    }
   }
 
   return {
@@ -244,6 +304,8 @@ export function useOrders() {
     bulkUpdateStatus,
     assignDelivery,
     fetchDeliveryOrders,
+    unsubscribeAll,
     allowedTransitions,
+    roleTransitions,
   }
 }
