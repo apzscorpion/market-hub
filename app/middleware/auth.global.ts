@@ -1,24 +1,56 @@
-export default defineNuxtRouteMiddleware((to) => {
+export default defineNuxtRouteMiddleware(async (to) => {
+  // Public pages that don't require auth
   const publicPaths = ['/login', '/no-access']
-  if (publicPaths.includes(to.path)) return
+  const isPublicPage = publicPaths.some(p => to.path === p || to.path.startsWith(p + '/'))
+
+  // On server/prerender, skip auth checks
+  if (import.meta.server) return
 
   const authStore = useAuthStore()
 
-  if (!authStore.initialized) return
+  // Wait for auth to initialize before making any decisions
+  if (!authStore.initialized) {
+    await new Promise<void>((resolve) => {
+      const stop = watch(
+        () => authStore.initialized,
+        (ready) => {
+          if (ready) {
+            stop()
+            resolve()
+          }
+        },
+        { immediate: true },
+      )
+    })
+  }
 
+  // After auth is initialized, enforce rules
+  if (isPublicPage) {
+    // Redirect authenticated users away from login
+    if (authStore.isAuthenticated && to.path === '/login') {
+      return navigateTo('/')
+    }
+    return
+  }
+
+  // Not authenticated → redirect to login
   if (!authStore.isAuthenticated) {
     return navigateTo('/login')
   }
 
   // Role-based route protection
   const path = to.path
-  if (path.startsWith('/wholesaler') && !authStore.isWholesaler) {
+
+  // Strip locale prefix for role checks (e.g., /ml/wholesaler/... → /wholesaler/...)
+  const normalizedPath = path.replace(/^\/(en|ml)/, '')
+
+  if (normalizedPath.startsWith('/wholesaler') && !authStore.isWholesaler) {
     return navigateTo('/')
   }
-  if (path.startsWith('/retailer') && !authStore.isRetailer && !authStore.isWholesaler) {
+  if (normalizedPath.startsWith('/retailer') && !authStore.isRetailer && !authStore.isWholesaler) {
     return navigateTo('/')
   }
-  if (path.startsWith('/delivery') && !authStore.isDelivery) {
+  if (normalizedPath.startsWith('/delivery') && !authStore.isDelivery) {
     return navigateTo('/')
   }
 })
