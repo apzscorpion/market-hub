@@ -74,8 +74,12 @@ function openEdit(user: User): void {
 }
 
 async function onSubmit(): Promise<void> {
-  if (!form.name.trim() || !form.email.trim()) {
-    showError('Name and email are required')
+  if (!form.name.trim() || !form.phone.trim()) {
+    showError('Name and phone are required')
+    return
+  }
+  if (form.role === 'retailer' && !form.address.trim()) {
+    showError('Address is required for retailers (needed for delivery)')
     return
   }
 
@@ -147,27 +151,30 @@ function roleColor(role: UserRole): string {
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Name *</label>
-          <input v-model="form.name" class="w-full px-3 py-2 text-sm border rounded-lg">
+          <input v-model="form.name" class="input-sm" placeholder="Shop / Person name">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Email *</label>
-          <input v-model="form.email" type="email" placeholder="user@example.com" class="w-full px-3 py-2 text-sm border rounded-lg">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Phone</label>
-          <input v-model="form.phone" type="tel" placeholder="+91..." class="w-full px-3 py-2 text-sm border rounded-lg">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Role</label>
-          <select v-model="form.role" class="w-full px-3 py-2 text-sm border rounded-lg">
-            <option value="retailer">Retailer</option>
-            <option value="delivery">Delivery</option>
-            <option value="wholesaler">Wholesaler</option>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Role *</label>
+          <select v-model="form.role" class="input-sm">
+            <option value="retailer">Retailer (Shop Owner)</option>
+            <option value="delivery">Delivery Partner</option>
+            <option value="wholesaler">Wholesaler (Admin)</option>
           </select>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Address</label>
-          <input v-model="form.address" class="w-full px-3 py-2 text-sm border rounded-lg">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Phone *</label>
+          <input v-model="form.phone" type="tel" placeholder="+91 98765 43210" class="input-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Email</label>
+          <input v-model="form.email" type="email" placeholder="user@example.com" class="input-sm">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-xs font-medium text-gray-600 mb-1">
+            Address {{ form.role === 'retailer' ? '*' : '' }}
+            <span v-if="form.role === 'retailer'" class="text-gray-400 font-normal">(delivery address)</span>
+          </label>
+          <textarea v-model="form.address" rows="2" placeholder="Shop address for delivery" class="input-sm resize-none" />
         </div>
       </div>
       <div class="flex gap-2">
