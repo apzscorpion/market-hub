@@ -247,9 +247,20 @@ function confidenceColor(c: number): string {
         <canvas ref="canvasRef" class="hidden" />
         <div :id="scanContainerId" class="hidden" />
 
+        <!-- Rejection message -->
+        <div
+          v-if="progress.step === 'rejected'"
+          class="bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-center gap-2"
+        >
+          <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <p class="text-xs text-red-700">Not a product label. Point at the product packaging.</p>
+        </div>
+
         <!-- Suggestion -->
         <div
-          v-if="progress.suggestion"
+          v-if="progress.suggestion && progress.step !== 'rejected'"
           class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2"
         >
           <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -259,12 +270,16 @@ function confidenceColor(c: number): string {
         </div>
 
         <!-- Live detected data -->
-        <div v-if="result" class="bg-gray-50 rounded-lg p-3 space-y-1.5">
+        <div v-if="result && result.isProductLabel" class="bg-gray-50 rounded-lg p-3 space-y-1.5">
           <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-semibold text-gray-500 uppercase">Detected</span>
             <span :class="['text-xs font-semibold', confidenceColor(result.confidence)]">
               {{ (result.confidence * 100).toFixed(0) }}%
             </span>
+          </div>
+          <div v-if="result.brand" class="flex justify-between text-sm">
+            <span class="text-gray-500">Brand</span>
+            <span class="font-medium text-blue-700">{{ result.brand }}</span>
           </div>
           <div v-if="result.name" class="flex justify-between text-sm">
             <span class="text-gray-500">Product</span>
@@ -280,7 +295,7 @@ function confidenceColor(c: number): string {
           </div>
           <div v-if="result.price" class="flex justify-between text-sm">
             <span class="text-gray-500">MRP</span>
-            <span class="font-medium text-gray-900">₹{{ result.price }}</span>
+            <span class="font-medium text-green-700">₹{{ result.price }}</span>
           </div>
           <div v-if="result.weight" class="flex justify-between text-sm">
             <span class="text-gray-500">Weight</span>
@@ -288,19 +303,19 @@ function confidenceColor(c: number): string {
           </div>
           <div v-if="result.barcode" class="flex justify-between text-sm">
             <span class="text-gray-500">Barcode</span>
-            <span class="font-medium text-gray-900 text-xs">{{ result.barcode }}</span>
+            <span class="font-medium text-gray-900 text-xs font-mono">{{ result.barcode }}</span>
           </div>
           <div v-if="result.vegStatus !== 'unknown'" class="flex justify-between text-sm">
             <span class="text-gray-500">Diet</span>
-            <span :class="['font-medium', result.vegStatus === 'veg' ? 'text-green-600' : 'text-red-600']">
-              {{ result.vegStatus === 'veg' ? '● Veg' : '● Non-Veg' }}
+            <span :class="['font-semibold', result.vegStatus === 'veg' ? 'text-green-600' : 'text-red-600']">
+              {{ result.vegStatus === 'veg' ? '🟢 Vegetarian' : '🔴 Non-Veg' }}
             </span>
           </div>
         </div>
 
         <!-- Use data button -->
         <button
-          v-if="result && result.confidence >= 0.2"
+          v-if="result && result.isProductLabel && result.confidence >= 0.2"
           class="w-full py-3 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors"
           @click="useResult"
         >

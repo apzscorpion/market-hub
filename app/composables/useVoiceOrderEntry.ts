@@ -19,10 +19,14 @@ export interface VoiceOrder {
 const QTY_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5,
   six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-  eleven: 11, twelve: 12, fifteen: 15, twenty: 20,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
+  sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
   'twenty five': 25, thirty: 30, forty: 40, fifty: 50,
   hundred: 100, dozen: 12, 'half dozen': 6,
 }
+
+// Words that indicate "this is a quantity separator"
+const ITEM_SEPARATORS = /\b(?:items?|pieces?|pcs|nos|numbers?|boxes?|packs?|units?|case|cases)\b/gi
 
 export function useVoiceOrderEntry() {
   const productStore = useProductStore()
@@ -35,117 +39,170 @@ export function useVoiceOrderEntry() {
   const rawTranscript = ref('')
   const parsing = ref(false)
 
-  function parseQuantity(text: string): { qty: number, remaining: string } {
-    const trimmed = text.trim()
-
-    // Check numeric at start: "3 vanilla cone"
-    const numMatch = trimmed.match(/^(\d+)\s+(.+)/)
-    if (numMatch) {
-      return { qty: parseInt(numMatch[1], 10), remaining: numMatch[2] }
-    }
-
-    // Check numeric at end: "vanilla cone 3"
-    const numEndMatch = trimmed.match(/^(.+?)\s+(\d+)$/)
-    if (numEndMatch) {
-      return { qty: parseInt(numEndMatch[2], 10), remaining: numEndMatch[1] }
-    }
-
-    // Check word numbers: "three vanilla cone"
-    for (const [word, num] of Object.entries(QTY_WORDS)) {
-      if (trimmed.toLowerCase().startsWith(word + ' ')) {
-        return { qty: num, remaining: trimmed.slice(word.length).trim() }
-      }
-      if (trimmed.toLowerCase().endsWith(' ' + word)) {
-        return { qty: num, remaining: trimmed.slice(0, -(word.length + 1)).trim() }
-      }
-    }
-
-    // "each" pattern: "vanilla cone 3 each" or "3 each vanilla"
-    const eachMatch = trimmed.match(/(\d+)\s*each/i)
-    if (eachMatch) {
-      const qty = parseInt(eachMatch[1], 10)
-      const remaining = trimmed.replace(/\d+\s*each/i, '').trim()
-      return { qty, remaining }
-    }
-
-    return { qty: 1, remaining: trimmed }
+  function wordToNumber(word: string): number | null {
+    const lower = word.toLowerCase().trim()
+    const num = parseInt(lower, 10)
+    if (!isNaN(num)) return num
+    return QTY_WORDS[lower] ?? null
   }
 
+  // Main parsing: handles natural speech like
+  // "vanilla 3 item choco bar 5 item mango 10 item"
+  // "3 vanilla cone, 5 mango bar, butterscotch 2 each"
+  // "retailer ABC vanilla 3 choco 5 mango 10"
   function parseTranscript(text: string): VoiceOrder {
     const products = productStore.products
-    const lines: VoiceOrderLine[] = []
     let retailerName = ''
 
-    // Split by common separators
-    const parts = text
-      .split(/[,;।\n]+|(?:\band\b)|(?:\balso\b)/i)
-      .map(p => p.trim())
-      .filter(p => p.length > 1)
+    // Normalize text
+    let normalized = text.trim()
 
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i].trim()
-      if (!part) continue
+    // Step 1: Check for retailer prefix
+    const retailerMatch = normalized.match(
+      /^(?:retailer|shop|store|customer|for)\s*[:\-]?\s*([^,\d]+?)(?=\s+\d|\s+vanilla|\s+choco|\s+mango|\s+butter|\s+straw|\s+ice|\s+pista|,|$)/i,
+    )
+    if (retailerMatch) {
+      retailerName = retailerMatch[1].trim()
+      normalized = normalized.slice(retailerMatch[0].length).trim()
+    }
 
-      // Check if this is the retailer name (usually first, or has keywords)
-      const retailerMatch = part.match(
-        /^(?:retailer|shop|store|customer|for)\s*[:\-]?\s*(.+)/i,
-      )
-      if (retailerMatch || (i === 0 && !parseQuantity(part).remaining.match(/vanilla|chocolate|ice|cream|bar|cone|cup|stick|mango|butter/i))) {
-        // First part might be retailer name if it doesn't look like a product
-        if (retailerMatch) {
-          retailerName = retailerMatch[1].trim()
-        }
-        else if (i === 0) {
-          // Check if it matches any product — if not, treat as retailer name
-          const testMatch = matchProducts(part, products)
-          if (testMatch.length === 0 || testMatch[0].score > 5) {
-            retailerName = part
-            continue
-          }
-        }
-        if (retailerMatch) continue
+    // Step 2: Split into product-quantity segments
+    // Strategy: split by "item/items/piece/pieces/each" as segment boundaries,
+    // AND by commas, semicolons, "and", newlines
+    const segments = splitIntoSegments(normalized)
+
+    // Step 3: Parse each segment into product + quantity
+    const lines: VoiceOrderLine[] = []
+    for (const segment of segments) {
+      const parsed = parseSegment(segment.trim(), products)
+      if (parsed) {
+        lines.push(parsed)
       }
+    }
 
-      // Parse as product line
-      const { qty, remaining } = parseQuantity(part)
-
-      // Handle "X items each" pattern: "vanilla, mango, butterscotch 3 each"
-      // If this part has quantity but previous parts don't, apply to all
-      if (qty > 1 && remaining.length < 3 && lines.length > 0) {
-        // Apply quantity to all previous lines that have qty=1
-        for (const line of lines) {
-          if (line.quantity === 1) {
-            line.quantity = qty
-            line.total = line.price * qty
-          }
-        }
-        continue
-      }
-
-      const productQuery = remaining || part
-      const matches = matchProducts(productQuery, products)
-      const best = matches[0]
-
-      const matchedProduct = best?.product ?? null
-      const price = matchedProduct?.price ?? 0
-      const confidence = best ? Math.max(0, 1 - (best.score / 7)) : 0
-
-      lines.push({
-        productName: matchedProduct?.nickname || matchedProduct?.name || productQuery,
-        matchedProduct,
-        quantity: qty,
-        price,
-        total: price * qty,
-        confidence,
-      })
+    // Step 4: If first segment didn't match a product, it might be retailer name
+    if (lines.length > 0 && !lines[0].matchedProduct && !retailerName) {
+      retailerName = lines[0].productName
+      lines.shift()
     }
 
     const totalAmount = lines.reduce((sum, l) => sum + l.total, 0)
 
+    return { retailerName, lines, totalAmount }
+  }
+
+  function splitIntoSegments(text: string): string[] {
+    // First, replace item separators with a unique delimiter
+    // "vanilla 3 item choco bar 5 item" → "vanilla 3 ||| choco bar 5 |||"
+    let processed = text.replace(ITEM_SEPARATORS, '|||')
+
+    // Also split on "each"
+    processed = processed.replace(/\beach\b/gi, '|||')
+
+    // Split by standard separators too
+    const segments = processed
+      .split(/\|\|\||[,;।\n]+|\band\b|\balso\b|\bthen\b/i)
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+
+    // If no separators found, try to split by "number + word" patterns
+    // "vanilla 3 choco bar 5 mango 10" → ["vanilla 3", "choco bar 5", "mango 10"]
+    if (segments.length <= 1 && text.length > 10) {
+      const numberSplit = splitByNumberBoundaries(text)
+      if (numberSplit.length > 1) return numberSplit
+    }
+
+    return segments
+  }
+
+  // Split text where a number followed by a new word starts a new product
+  // "vanilla 3 choco bar 5 mango 10" → ["vanilla 3", "choco bar 5", "mango 10"]
+  function splitByNumberBoundaries(text: string): string[] {
+    const words = text.split(/\s+/)
+    const segments: string[] = []
+    let current: string[] = []
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i]
+      const num = wordToNumber(word)
+
+      if (num !== null && current.length > 0) {
+        // This is a number — check if the NEXT word starts a new product
+        const nextWord = words[i + 1]
+        if (nextWord && wordToNumber(nextWord) === null) {
+          // Number followed by text = end of current segment
+          current.push(word)
+          segments.push(current.join(' '))
+          current = []
+          continue
+        }
+      }
+
+      current.push(word)
+    }
+
+    if (current.length > 0) {
+      segments.push(current.join(' '))
+    }
+
+    return segments.filter(s => s.trim().length > 0)
+  }
+
+  function parseSegment(segment: string, products: Product[]): VoiceOrderLine | null {
+    if (!segment || segment.length < 2) return null
+
+    const words = segment.split(/\s+/)
+    let quantity = 1
+    let productQuery = segment
+
+    // Pattern 1: "<number> <product>" — "3 vanilla cone"
+    const firstNum = wordToNumber(words[0])
+    if (firstNum !== null && words.length >= 2) {
+      quantity = firstNum
+      productQuery = words.slice(1).join(' ')
+    }
+    else {
+      // Pattern 2: "<product> <number>" — "vanilla cone 3"
+      const lastNum = wordToNumber(words[words.length - 1])
+      if (lastNum !== null && words.length >= 2) {
+        quantity = lastNum
+        productQuery = words.slice(0, -1).join(' ')
+      }
+      else {
+        // Pattern 3: number in the middle — "vanilla 3 cone" (less common)
+        for (let i = 1; i < words.length - 1; i++) {
+          const midNum = wordToNumber(words[i])
+          if (midNum !== null) {
+            quantity = midNum
+            productQuery = [...words.slice(0, i), ...words.slice(i + 1)].join(' ')
+            break
+          }
+        }
+      }
+    }
+
+    // Clean up product query
+    productQuery = productQuery
+      .replace(/\b(item|items|piece|pieces|pcs|nos|box|boxes|pack|packs|unit|units|each)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (!productQuery) return null
+
+    // Match against product catalog
+    const matches = matchProducts(productQuery, products)
+    const best = matches[0]
+    const matchedProduct = best?.product ?? null
+    const price = matchedProduct?.price ?? 0
+    const confidence = best ? Math.max(0, 1 - (best.score / 7)) : 0
+
     return {
-      retailerName,
-      lines,
-      totalAmount,
+      productName: matchedProduct?.nickname || matchedProduct?.name || productQuery,
+      matchedProduct,
+      quantity,
+      price,
+      total: price * quantity,
+      confidence,
     }
   }
 

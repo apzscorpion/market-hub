@@ -1,0 +1,101 @@
+{
+  "brands": {
+    "lazza": {
+      "name": "Lazza",
+      "aliases": ["lasa", "lhasa", "lazaa", "lazza ice cream", "lazza ice creams"],
+      "defaultCategory": "ice-cream",
+      "products": [
+        {"pattern": "vanilla.*cone", "name": "Vanilla Cone", "type": "cone", "flavor": "vanilla"},
+        {"pattern": "vanilla.*bar", "name": "Vanilla Choco Bar", "type": "bar", "flavor": "vanilla"},
+        {"pattern": "vanilla.*cup", "name": "Vanilla Cup", "type": "cup", "flavor": "vanilla"},
+        {"pattern": "vanilla.*stick", "name": "Vanilla Stick", "type": "stick", "flavor": "vanilla"},
+        {"pattern": "chocolate.*bar", "name": "Chocolate Bar", "type": "bar", "flavor": "chocolate"},
+        {"pattern": "chocolate.*cone", "name": "Chocolate Cone", "type": "cone", "flavor": "chocolate"},
+        {"pattern": "strawberry", "name": "Strawberry", "type": "cup", "flavor": "strawberry"},
+        {"pattern": "mango", "name": "Mango", "type": "cup", "flavor": "mango"},
+        {"pattern": "butterscotch", "name": "Butterscotch", "type": "cup", "flavor": "butterscotch"},
+        {"pattern": "pista|pistachio", "name": "Pista", "type": "cup", "flavor": "pista"},
+        {"pattern": "kulfi", "name": "Kulfi", "type": "kulfi", "flavor": "kulfi"},
+        {"pattern": "cassata", "name": "Cassata", "type": "cassata", "flavor": "mixed"},
+        {"pattern": "family.*pack", "name": "Family Pack", "type": "family pack", "flavor": "vanilla"},
+        {"pattern": "party.*pack", "name": "Party Pack", "type": "party pack", "flavor": "mixed"}
+      ]
+    },
+    "amul": {
+      "name": "Amul",
+      "aliases": ["amul ice cream", "amul ice creams"],
+      "defaultCategory": "ice-cream",
+      "products": [
+        {"pattern": "tricone|tri.*cone", "name": "Tricone", "type": "cone", "flavor": "vanilla"},
+        {"pattern": "chocobar|choco.*bar", "name": "Chocobar", "type": "bar", "flavor": "chocolate"},
+        {"pattern": "cream.*rich", "name": "Creamrich", "type": "cup", "flavor": "vanilla"},
+        {"pattern": "sundae", "name": "Sundae", "type": "sundae", "flavor": "mixed"},
+        {"pattern": "flaavyo", "name": "Flaavyo", "type": "cup", "flavor": "mixed"}
+      ]
+    },
+    "vadilal": {
+      "name": "Vadilal",
+      "aliases": ["vadilal ice cream"],
+      "defaultCategory": "ice-cream",
+      "products": [
+        {"pattern": "kulfi", "name": "Kulfi", "type": "kulfi", "flavor": "kulfi"},
+        {"pattern": "cassata", "name": "Cassata", "type": "cassata", "flavor": "mixed"},
+        {"pattern": "sandwich", "name": "Sandwich", "type": "sandwich", "flavor": "vanilla"}
+      ]
+    },
+    "kwality": {
+      "name": "Kwality Walls",
+      "aliases": ["kwality walls", "walls", "kwality wall's"],
+      "defaultCategory": "ice-cream",
+      "products": [
+        {"pattern": "cornetto", "name": "Cornetto", "type": "cone", "flavor": "vanilla"},
+        {"pattern": "magnum", "name": "Magnum", "type": "bar", "flavor": "chocolate"},
+        {"pattern": "feast", "name": "Feast", "type": "stick", "flavor": "mixed"},
+        {"pattern": "paddle.*pop", "name": "Paddle Pop", "type": "stick", "flavor": "mixed"}
+      ]
+    },
+    "havmor": {
+      "name": "Havmor",
+      "aliases": ["havmore", "hav mor"],
+      "defaultCategory": "ice-cream",
+      "products": [
+        {"pattern": "corneto|cornetto", "name": "Cornetto", "type": "cone", "flavor": "vanilla"},
+        {"pattern": "kesar.*pista", "name": "Kesar Pista", "type": "cup", "flavor": "kesar"}
+      ]
+    },
+    "naturals": {
+      "name": "Naturals",
+      "aliases": ["naturals ice cream", "natural ice cream"],
+      "defaultCategory": "ice-cream",
+      "products": [
+        {"pattern": "tender.*coconut", "name": "Tender Coconut", "type": "tub", "flavor": "tender coconut"},
+        {"pattern": "sitaphal", "name": "Sitaphal", "type": "tub", "flavor": "sitaphal"},
+        {"pattern": "alphonso|mango", "name": "Alphonso Mango", "type": "tub", "flavor": "mango"}
+      ]
+    }
+  },
+  "labelIndicators": {
+    "strong": [
+      "mrp", "m.r.p", "net wt", "net weight", "net qty", "fssai",
+      "lic no", "mfg", "manufactured", "best before", "expiry",
+      "batch no", "batch", "store at", "keep frozen",
+      "ingredients", "contains", "allergen", "nutritional"
+    ],
+    "moderate": [
+      "ice cream", "icecream", "frozen dessert", "frozen dairy",
+      "ml", "ltr", "gm", "gram", "per serving", "calories",
+      "vegetarian", "non-veg", "veg"
+    ],
+    "packaging": [
+      "box", "pack", "carton", "piece", "pcs", "nos",
+      "family", "party", "combo", "offer"
+    ]
+  },
+  "pricePatterns": [
+    "(?:₹|rs\\.?|mrp\\.?|m\\.?r\\.?p\\.?|price)\\s*[:\\-]?\\s*(\\d+(?:\\.\\d{1,2})?)",
+    "(\\d+(?:\\.\\d{1,2})?)\\s*(?:₹|rs|rupees)"
+  ],
+  "weightPatterns": [
+    "(\\d+(?:\\.\\d+)?)\\s*(ml|l|litre|liter|g|gm|gram|kg|oz)\\b"
+  ]
+}
