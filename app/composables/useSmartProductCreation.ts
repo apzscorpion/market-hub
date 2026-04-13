@@ -8,10 +8,11 @@ export interface RecognizedProduct {
   barcode: string
   rawText: string
   confidence: number
+  vegStatus: 'veg' | 'non-veg' | 'unknown'
 }
 
 export interface ScanProgress {
-  step: 'camera' | 'capturing' | 'ocr' | 'barcode' | 'analyzing' | 'done' | 'error'
+  step: 'idle' | 'scanning' | 'reading' | 'done' | 'error'
   message: string
   percent: number
   detectedFields: string[]
@@ -21,19 +22,22 @@ export interface ScanProgress {
 const KNOWN_BRANDS = [
   'amul', 'kwality', 'walls', 'vadilal', 'havmor', 'mother dairy', 'baskin robbins',
   'naturals', 'cream bell', 'arun', 'lazza', 'lasa', 'lhasa', 'joy', 'dinshaws',
-  'top n town', 'rollick', 'polar bear', 'hatsun', 'ibaco', 'nandini',
+  'top n town', 'rollick', 'polar bear', 'hatsun', 'ibaco', 'nandini', 'cornetto',
+  'magnum', 'feast', 'choco bar', 'milky bar',
 ]
 
 const KNOWN_FLAVORS = [
   'vanilla', 'chocolate', 'strawberry', 'mango', 'butterscotch', 'pista', 'pistachio',
   'kulfi', 'tender coconut', 'blackcurrant', 'orange', 'kesar', 'saffron',
   'rajbhog', 'malai', 'anjeer', 'fig', 'choco chip', 'cookies and cream',
-  'mint', 'coffee', 'caramel', 'blueberry', 'mixed fruit', 'litchi',
+  'mint', 'coffee', 'caramel', 'blueberry', 'mixed fruit', 'litchi', 'paan',
+  'sitaphal', 'gulkand', 'rose', 'jamun', 'jackfruit',
 ]
 
 const KNOWN_TYPES = [
   'stick', 'cup', 'cone', 'bar', 'tub', 'family pack', 'party pack',
   'sandwich', 'candy', 'lolly', 'kulfi', 'brick', 'cassata', 'roll',
+  'sundae', 'bucket', 'scoop',
 ]
 
 export function useSmartProductCreation() {
@@ -41,21 +45,17 @@ export function useSmartProductCreation() {
   const result = ref<RecognizedProduct | null>(null)
   const error = ref<string | null>(null)
   const progress = ref<ScanProgress>({
-    step: 'camera',
-    message: 'Ready to scan',
+    step: 'idle',
+    message: 'Point camera at product',
     percent: 0,
     detectedFields: [],
     suggestion: '',
   })
 
+  let tesseractWorker: any = null
+
   function updateProgress(step: ScanProgress['step'], message: string, percent: number, suggestion = '') {
-    progress.value = {
-      ...progress.value,
-      step,
-      message,
-      percent,
-      suggestion,
-    }
+    progress.value = { ...progress.value, step, message, percent, suggestion }
   }
 
   function addDetectedField(field: string) {
@@ -64,85 +64,17 @@ export function useSmartProductCreation() {
     }
   }
 
-  async function recognizeFromImage(file: File): Promise<RecognizedProduct> {
-    processing.value = true
-    error.value = null
-    result.value = null
-    progress.value.detectedFields = []
-
-    try {
-      // Step 1: OCR
-      updateProgress('ocr', 'Reading text from image...', 20)
-      const ocrText = await performOCR(file)
-
-      // Step 2: Barcode scan
-      updateProgress('barcode', 'Scanning for barcodes...', 50)
-      const barcode = await scanBarcode(file)
-
-      // Step 3: Analyze extracted text
-      updateProgress('analyzing', 'Analyzing product details...', 75)
-      const recognized = analyzeText(ocrText, barcode)
-
-      // Step 4: Done
-      updateProgress('done', 'Scan complete', 100,
-        recognized.confidence < 0.5
-          ? 'Try showing the other side of the product for more details'
-          : '',
-      )
-
-      result.value = recognized
-      return recognized
-    }
-    catch (e) {
-      const msg = (e as Error).message
-      error.value = msg
-      updateProgress('error', msg, 0)
-      throw e
-    }
-    finally {
-      processing.value = false
-    }
-  }
-
-  async function performOCR(file: File): Promise<string> {
+  async function initOCR() {
+    if (tesseractWorker) return
     const { createWorker } = await import('tesseract.js')
-    const worker = await createWorker('eng')
-
-    try {
-      const { data } = await worker.recognize(file)
-      return data.text
-    }
-    finally {
-      await worker.terminate()
-    }
+    tesseractWorker = await createWorker('eng')
   }
 
-  async function scanBarcode(file: File): Promise<string> {
+  async function ocrFromCanvas(canvas: HTMLCanvasElement): Promise<string> {
+    if (!tesseractWorker) await initOCR()
     try {
-      const { Html5Qrcode } = await import('html5-qrcode')
-
-      return new Promise((resolve) => {
-        const img = new Image()
-        img.onload = async () => {
-          // Create a canvas to pass to the scanner
-          const canvas = document.createElement('canvas')
-          canvas.width = img.width
-          canvas.height = img.height
-          const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, 0, 0)
-
-          try {
-            const result = await Html5Qrcode.scanFile(file, false)
-            addDetectedField('Barcode')
-            resolve(result)
-          }
-          catch {
-            resolve('')
-          }
-        }
-        img.onerror = () => resolve('')
-        img.src = URL.createObjectURL(file)
-      })
+      const { data } = await tesseractWorker.recognize(canvas)
+      return data.text
     }
     catch {
       return ''
@@ -159,6 +91,7 @@ export function useSmartProductCreation() {
     let variant = ''
     let price: number | null = null
     let weight = ''
+    let vegStatus: 'veg' | 'non-veg' | 'unknown' = 'unknown'
     let confidence = 0
 
     // Detect brand
@@ -191,7 +124,7 @@ export function useSmartProductCreation() {
       }
     }
 
-    // Detect price (₹XX, Rs.XX, MRP XX, etc.)
+    // Detect price
     const priceMatch = text.match(/(?:₹|rs\.?|mrp\.?|price)\s*:?\s*(\d+(?:\.\d{1,2})?)/i)
     if (priceMatch) {
       price = parseFloat(priceMatch[1])
@@ -199,7 +132,7 @@ export function useSmartProductCreation() {
       confidence += 0.15
     }
 
-    // Detect weight/volume (XXml, XXg, XXL, etc.)
+    // Detect weight/volume
     const weightMatch = text.match(/(\d+(?:\.\d+)?)\s*(ml|l|litre|liter|g|gm|gram|kg)\b/i)
     if (weightMatch) {
       weight = `${weightMatch[1]}${weightMatch[2].toLowerCase()}`
@@ -207,46 +140,58 @@ export function useSmartProductCreation() {
       confidence += 0.1
     }
 
-    // Detect "ice cream" mention
+    // Detect veg/non-veg
+    if (text.includes('non-veg') || text.includes('non veg') || text.includes('contains egg')) {
+      vegStatus = 'non-veg'
+      addDetectedField('Non-Veg')
+      confidence += 0.05
+    }
+    else if (text.includes('vegetarian') || text.includes('100% veg') || text.includes('pure veg')) {
+      vegStatus = 'veg'
+      addDetectedField('Veg')
+      confidence += 0.05
+    }
+
+    // Detect "ice cream"
     if (text.includes('ice cream') || text.includes('icecream') || text.includes('frozen')) {
       if (!type) type = 'Ice Cream'
       confidence += 0.1
     }
 
-    // Build product name from detected parts
+    // Build name from detected parts if no brand found
     if (!name && lines.length > 0) {
-      // Use the first non-trivial line as name
       const nameLine = lines.find(l => l.length > 3 && l.length < 50 && !/^\d+$/.test(l))
       if (nameLine) {
         name = nameLine
-        addDetectedField('Name (from label)')
+        addDetectedField('Name')
       }
     }
 
     const fullName = [name, flavor, type].filter(Boolean).join(' ')
 
-    // Generate suggestion based on what's missing
+    // Suggestion based on what's missing
     let suggestion = ''
-    if (confidence < 0.3) {
-      suggestion = 'Try showing the product label more clearly'
+    if (confidence < 0.2) {
+      suggestion = 'Move closer to the product label'
     }
     else if (!flavor) {
-      suggestion = 'Show the front of the product to detect flavor'
+      suggestion = 'Show the front label to detect flavor'
     }
     else if (!price) {
-      suggestion = 'Show the price tag or MRP printed on the product'
+      suggestion = 'Show the MRP/price on the packaging'
     }
     else if (!weight) {
-      suggestion = 'Show the back for weight/volume details'
+      suggestion = 'Show the back for weight/volume info'
     }
 
     if (barcode) {
+      addDetectedField('Barcode')
       confidence += 0.1
     }
 
     return {
-      name: fullName || name || 'Unknown Product',
-      type: type || 'Ice Cream',
+      name: fullName || name || '',
+      type: type || '',
       flavor: flavor || '',
       variant,
       price,
@@ -254,11 +199,58 @@ export function useSmartProductCreation() {
       barcode,
       rawText,
       confidence: Math.min(confidence, 1),
+      vegStatus,
+    }
+  }
+
+  // Merge new scan results with existing ones (keep best data)
+  function mergeResults(existing: RecognizedProduct | null, newScan: RecognizedProduct): RecognizedProduct {
+    if (!existing) return newScan
+    return {
+      name: newScan.name || existing.name,
+      type: newScan.type || existing.type,
+      flavor: newScan.flavor || existing.flavor,
+      variant: newScan.variant || existing.variant,
+      price: newScan.price ?? existing.price,
+      weight: newScan.weight || existing.weight,
+      barcode: newScan.barcode || existing.barcode,
+      rawText: (existing.rawText + '\n' + newScan.rawText).trim(),
+      confidence: Math.max(existing.confidence, newScan.confidence),
+      vegStatus: newScan.vegStatus !== 'unknown' ? newScan.vegStatus : existing.vegStatus,
+    }
+  }
+
+  async function processFrame(canvas: HTMLCanvasElement, currentBarcode: string): Promise<RecognizedProduct | null> {
+    processing.value = true
+    updateProgress('reading', 'Reading product label...', 60)
+
+    try {
+      const ocrText = await ocrFromCanvas(canvas)
+      if (!ocrText.trim() && !currentBarcode) {
+        processing.value = false
+        return null
+      }
+
+      const newResult = analyzeText(ocrText, currentBarcode)
+      if (newResult.confidence > 0.15) {
+        const merged = mergeResults(result.value, newResult)
+        result.value = merged
+        updateProgress('done', 'Product detected', Math.min(95, merged.confidence * 100),
+          merged.confidence < 0.5 ? 'Show another side for more details' : '')
+        return merged
+      }
+      return null
+    }
+    finally {
+      processing.value = false
     }
   }
 
   function recognizeFromVoice(transcript: string): RecognizedProduct {
-    return analyzeText(transcript, '')
+    progress.value.detectedFields = []
+    const recognized = analyzeText(transcript, '')
+    result.value = recognized
+    return recognized
   }
 
   function resetScan() {
@@ -266,13 +258,20 @@ export function useSmartProductCreation() {
     result.value = null
     error.value = null
     progress.value = {
-      step: 'camera',
-      message: 'Ready to scan',
+      step: 'idle',
+      message: 'Point camera at product',
       percent: 0,
       detectedFields: [],
       suggestion: '',
     }
   }
 
-  return { processing, result, error, progress, recognizeFromImage, recognizeFromVoice, resetScan }
+  async function cleanup() {
+    if (tesseractWorker) {
+      await tesseractWorker.terminate()
+      tesseractWorker = null
+    }
+  }
+
+  return { processing, result, error, progress, initOCR, processFrame, recognizeFromVoice, mergeResults, resetScan, cleanup }
 }

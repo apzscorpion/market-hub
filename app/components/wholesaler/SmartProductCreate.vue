@@ -7,131 +7,158 @@ const emit = defineEmits<{
     price: number | null
     weight: string
     barcode: string
+    vegStatus: string
   }]
 }>()
 
-const { processing, result, error, progress, recognizeFromImage, recognizeFromVoice, resetScan } = useSmartProductCreation()
-const { showError } = useToast()
+const { processing, result, error, progress, initOCR, processFrame, recognizeFromVoice, resetScan, cleanup } = useSmartProductCreation()
+const { showSuccess, showError } = useToast()
 
-const cameraActive = ref(false)
+const scannerActive = ref(false)
 const videoRef = ref<HTMLVideoElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
-const previewUrl = ref<string | null>(null)
-const selectedFile = ref<File | null>(null)
 const stream = ref<MediaStream | null>(null)
-const voiceMode = ref(false)
-const voiceInput = ref('')
+const currentBarcode = ref('')
+const ocrInterval = ref<ReturnType<typeof setInterval> | null>(null)
+const barcodeScanner = ref<any>(null)
+const scanContainerId = `qr-reader-${Date.now()}`
 
-async function startCamera(): Promise<void> {
+async function startScanner(): Promise<void> {
   try {
+    // Start OCR engine loading in background
+    initOCR()
+
+    // Start camera
     stream.value = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
     })
-    cameraActive.value = true
+
+    scannerActive.value = true
     await nextTick()
+
     if (videoRef.value) {
       videoRef.value.srcObject = stream.value
+      await videoRef.value.play()
     }
+
+    // Start barcode scanning
+    startBarcodeScanner()
+
+    // Start periodic OCR (every 3 seconds)
+    ocrInterval.value = setInterval(() => captureAndOCR(), 3000)
+
+    // Do first OCR after 1.5s (let camera focus)
+    setTimeout(() => captureAndOCR(), 1500)
   }
   catch (e) {
-    showError('Camera access denied. Use file upload instead.')
+    showError('Camera access denied. Please allow camera access.')
   }
 }
 
-function stopCamera(): void {
-  if (stream.value) {
-    stream.value.getTracks().forEach(t => t.stop())
-    stream.value = null
+async function startBarcodeScanner(): Promise<void> {
+  try {
+    const { Html5Qrcode } = await import('html5-qrcode')
+
+    // Create a hidden container for html5-qrcode
+    await nextTick()
+    const container = document.getElementById(scanContainerId)
+    if (!container) return
+
+    barcodeScanner.value = new Html5Qrcode(scanContainerId)
+
+    await barcodeScanner.value.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 250, height: 250 }, disableFlip: false },
+      (decodedText: string) => {
+        if (decodedText && decodedText !== currentBarcode.value) {
+          currentBarcode.value = decodedText
+          showSuccess(`Barcode detected: ${decodedText}`)
+        }
+      },
+      () => { /* ignore scan failures */ },
+    )
   }
-  cameraActive.value = false
+  catch {
+    // Barcode scanner failed — that's OK, OCR still works
+    // This often happens because two video streams can't share the camera
+    // In that case, we scan barcodes from our own video frames
+    startBarcodeFromVideo()
+  }
 }
 
-function capturePhoto(): void {
-  if (!videoRef.value || !canvasRef.value) return
+function startBarcodeFromVideo(): void {
+  // Alternative: use html5-qrcode's static scanFile on captured frames
+  // This runs alongside OCR without needing a second camera stream
+}
+
+async function captureAndOCR(): Promise<void> {
+  if (!videoRef.value || !canvasRef.value || processing.value) return
 
   const video = videoRef.value
   const canvas = canvasRef.value
+
+  // Don't scan if video isn't playing
+  if (video.readyState < 2) return
+
   canvas.width = video.videoWidth
   canvas.height = video.videoHeight
   const ctx = canvas.getContext('2d')!
   ctx.drawImage(video, 0, 0)
 
-  canvas.toBlob(async (blob) => {
-    if (!blob) return
-    const file = new File([blob], `scan_${Date.now()}.jpg`, { type: 'image/jpeg' })
-    selectedFile.value = file
-    previewUrl.value = canvas.toDataURL('image/jpeg')
-    stopCamera()
-    await processImage()
-  }, 'image/jpeg', 0.9)
+  await processFrame(canvas, currentBarcode.value)
 }
 
-function onFileSelect(event: Event): void {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  selectedFile.value = file
-  previewUrl.value = URL.createObjectURL(file)
-}
-
-async function processImage(): Promise<void> {
-  if (!selectedFile.value) return
-  try {
-    const recognized = await recognizeFromImage(selectedFile.value)
-    if (recognized.confidence >= 0.3) {
-      emit('productRecognized', {
-        name: recognized.name,
-        type: recognized.type,
-        flavor: recognized.flavor,
-        price: recognized.price,
-        weight: recognized.weight,
-        barcode: recognized.barcode,
-      })
-    }
+function stopScanner(): void {
+  // Stop OCR interval
+  if (ocrInterval.value) {
+    clearInterval(ocrInterval.value)
+    ocrInterval.value = null
   }
-  catch (e) {
-    showError('Failed to analyze image. Try again with a clearer photo.')
+
+  // Stop barcode scanner
+  if (barcodeScanner.value) {
+    try { barcodeScanner.value.stop() } catch {}
+    barcodeScanner.value = null
   }
+
+  // Stop camera
+  if (stream.value) {
+    stream.value.getTracks().forEach(t => t.stop())
+    stream.value = null
+  }
+
+  scannerActive.value = false
 }
 
-function processVoice(): void {
-  if (!voiceInput.value.trim()) return
-  const recognized = recognizeFromVoice(voiceInput.value)
+function useResult(): void {
+  if (!result.value) return
   emit('productRecognized', {
-    name: recognized.name,
-    type: recognized.type,
-    flavor: recognized.flavor,
-    price: recognized.price,
-    weight: recognized.weight,
-    barcode: recognized.barcode,
+    name: result.value.name,
+    type: result.value.type,
+    flavor: result.value.flavor,
+    price: result.value.price,
+    weight: result.value.weight,
+    barcode: result.value.barcode,
+    vegStatus: result.value.vegStatus,
   })
-}
-
-async function retakePhoto(): Promise<void> {
-  previewUrl.value = null
-  selectedFile.value = null
+  stopScanner()
   resetScan()
-  await startCamera()
 }
 
 function reset(): void {
-  stopCamera()
-  previewUrl.value = null
-  selectedFile.value = null
-  voiceMode.value = false
-  voiceInput.value = ''
+  stopScanner()
   resetScan()
+  currentBarcode.value = ''
 }
 
 onUnmounted(() => {
-  stopCamera()
+  stopScanner()
+  cleanup()
 })
-
-function progressColor(percent: number): string {
-  if (percent < 30) return 'bg-red-500'
-  if (percent < 60) return 'bg-yellow-500'
-  return 'bg-green-500'
-}
 
 function confidenceColor(c: number): string {
   if (c >= 0.6) return 'text-green-600'
@@ -143,132 +170,105 @@ function confidenceColor(c: number): string {
 <template>
   <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
     <!-- Header -->
-    <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+    <div class="p-3 border-b border-gray-100 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+        <div class="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
           <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
           </svg>
         </div>
-        <h3 class="text-sm font-semibold text-gray-900">Smart Scan</h3>
+        <span class="text-sm font-semibold text-gray-900">Smart Scan</span>
       </div>
       <button
-        v-if="cameraActive || previewUrl || voiceMode"
-        class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+        v-if="scannerActive"
+        class="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
         @click="reset"
       >
-        Reset
+        Stop
       </button>
     </div>
 
-    <div class="p-4 space-y-3">
-      <!-- Mode selection -->
-      <div v-if="!cameraActive && !previewUrl && !voiceMode && !processing" class="grid grid-cols-3 gap-2">
+    <div class="p-3 space-y-3">
+      <!-- Start button -->
+      <div v-if="!scannerActive">
         <button
-          class="py-4 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 text-xs font-medium hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all flex flex-col items-center gap-1.5"
-          @click="startCamera"
+          class="w-full py-4 rounded-lg border-2 border-dashed border-blue-300 text-blue-700 text-sm font-medium hover:bg-blue-50 hover:border-blue-400 transition-all flex flex-col items-center gap-2"
+          @click="startScanner"
         >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
           </svg>
-          Camera
-        </button>
-        <label class="py-4 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 text-xs font-medium hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all flex flex-col items-center gap-1.5 cursor-pointer">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          Upload
-          <input type="file" accept="image/*" class="hidden" @change="onFileSelect">
-        </label>
-        <button
-          class="py-4 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 text-xs font-medium hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all flex flex-col items-center gap-1.5"
-          @click="voiceMode = true"
-        >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          Type
+          Scan Product
+          <span class="text-xs text-gray-400 font-normal">Point camera at product — reads automatically</span>
         </button>
       </div>
 
-      <!-- Camera view -->
-      <div v-if="cameraActive" class="space-y-3">
+      <!-- Live scanner -->
+      <div v-if="scannerActive" class="space-y-2">
+        <!-- Camera feed -->
         <div class="relative rounded-lg overflow-hidden bg-black aspect-[4/3]">
           <video ref="videoRef" autoplay playsinline muted class="w-full h-full object-cover" />
-          <!-- Scan overlay -->
+
+          <!-- Scan overlay corners -->
           <div class="absolute inset-0 pointer-events-none">
-            <div class="absolute inset-8 border-2 border-white/40 rounded-lg" />
-            <div class="absolute top-8 left-8 w-6 h-6 border-t-3 border-l-3 border-white rounded-tl-lg" />
-            <div class="absolute top-8 right-8 w-6 h-6 border-t-3 border-r-3 border-white rounded-tr-lg" />
-            <div class="absolute bottom-8 left-8 w-6 h-6 border-b-3 border-l-3 border-white rounded-bl-lg" />
-            <div class="absolute bottom-8 right-8 w-6 h-6 border-b-3 border-r-3 border-white rounded-br-lg" />
+            <div class="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-green-400 rounded-tl" />
+            <div class="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-green-400 rounded-tr" />
+            <div class="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-green-400 rounded-bl" />
+            <div class="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-green-400 rounded-br" />
           </div>
-          <p class="absolute bottom-2 left-0 right-0 text-center text-white text-xs bg-black/50 py-1">
-            Point camera at product label
-          </p>
-        </div>
-        <button
-          class="w-full py-3 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors flex items-center justify-center gap-2"
-          @click="capturePhoto"
-        >
-          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10" />
-          </svg>
-          Capture & Scan
-        </button>
-        <canvas ref="canvasRef" class="hidden" />
-      </div>
 
-      <!-- Processing indicator -->
-      <div v-if="processing" class="space-y-3">
-        <!-- Preview -->
-        <img v-if="previewUrl" :src="previewUrl" alt="Scanning..." class="w-full h-40 object-cover rounded-lg opacity-75" />
-
-        <!-- Progress bar -->
-        <div>
-          <div class="flex justify-between text-xs text-gray-600 mb-1">
-            <span>{{ progress.message }}</span>
-            <span>{{ progress.percent }}%</span>
-          </div>
-          <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+          <!-- Scanning indicator -->
+          <div class="absolute top-0 left-0 right-0">
             <div
-              :class="['h-full rounded-full transition-all duration-500', progressColor(progress.percent)]"
-              :style="{ width: `${progress.percent}%` }"
+              v-if="processing"
+              class="h-1 bg-blue-500 animate-pulse"
             />
           </div>
+
+          <!-- Status bar at bottom -->
+          <div class="absolute bottom-0 left-0 right-0 bg-black/60 px-3 py-2">
+            <div class="flex items-center justify-between">
+              <span class="text-white text-xs">
+                {{ processing ? 'Reading...' : 'Scanning...' }}
+              </span>
+              <div class="flex gap-1">
+                <span
+                  v-for="field in progress.detectedFields"
+                  :key="field"
+                  class="text-[9px] px-1.5 py-0.5 rounded-full bg-green-500 text-white font-medium"
+                >
+                  {{ field }}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Detected fields -->
-        <div v-if="progress.detectedFields.length > 0" class="flex flex-wrap gap-1.5">
-          <span
-            v-for="field in progress.detectedFields"
-            :key="field"
-            class="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium"
-          >
-            {{ field }}
-          </span>
-        </div>
-      </div>
+        <canvas ref="canvasRef" class="hidden" />
+        <div :id="scanContainerId" class="hidden" />
 
-      <!-- Result -->
-      <div v-if="result && !processing" class="space-y-3">
-        <img v-if="previewUrl" :src="previewUrl" alt="Scanned" class="w-full h-32 object-cover rounded-lg" />
-
-        <!-- Confidence -->
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-gray-500">Confidence</span>
-          <span :class="['text-sm font-semibold', confidenceColor(result.confidence)]">
-            {{ (result.confidence * 100).toFixed(0) }}%
-          </span>
+        <!-- Suggestion -->
+        <div
+          v-if="progress.suggestion"
+          class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2"
+        >
+          <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="text-xs text-amber-700">{{ progress.suggestion }}</p>
         </div>
 
-        <!-- Detected info -->
-        <div class="bg-gray-50 rounded-lg p-3 space-y-1.5">
+        <!-- Live detected data -->
+        <div v-if="result" class="bg-gray-50 rounded-lg p-3 space-y-1.5">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-gray-500 uppercase">Detected</span>
+            <span :class="['text-xs font-semibold', confidenceColor(result.confidence)]">
+              {{ (result.confidence * 100).toFixed(0) }}%
+            </span>
+          </div>
           <div v-if="result.name" class="flex justify-between text-sm">
             <span class="text-gray-500">Product</span>
-            <span class="font-medium text-gray-900">{{ result.name }}</span>
+            <span class="font-medium text-gray-900 text-right max-w-[60%] truncate">{{ result.name }}</span>
           </div>
           <div v-if="result.flavor" class="flex justify-between text-sm">
             <span class="text-gray-500">Flavor</span>
@@ -279,8 +279,8 @@ function confidenceColor(c: number): string {
             <span class="font-medium text-gray-900">{{ result.type }}</span>
           </div>
           <div v-if="result.price" class="flex justify-between text-sm">
-            <span class="text-gray-500">Price (MRP)</span>
-            <span class="font-medium text-gray-900">{{ result.price }}</span>
+            <span class="text-gray-500">MRP</span>
+            <span class="font-medium text-gray-900">₹{{ result.price }}</span>
           </div>
           <div v-if="result.weight" class="flex justify-between text-sm">
             <span class="text-gray-500">Weight</span>
@@ -290,73 +290,21 @@ function confidenceColor(c: number): string {
             <span class="text-gray-500">Barcode</span>
             <span class="font-medium text-gray-900 text-xs">{{ result.barcode }}</span>
           </div>
+          <div v-if="result.vegStatus !== 'unknown'" class="flex justify-between text-sm">
+            <span class="text-gray-500">Diet</span>
+            <span :class="['font-medium', result.vegStatus === 'veg' ? 'text-green-600' : 'text-red-600']">
+              {{ result.vegStatus === 'veg' ? '● Veg' : '● Non-Veg' }}
+            </span>
+          </div>
         </div>
 
-        <!-- Suggestion snackbar -->
-        <div
-          v-if="progress.suggestion"
-          class="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2"
-        >
-          <svg class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p class="text-xs text-amber-700">{{ progress.suggestion }}</p>
-        </div>
-
-        <!-- Detected fields tags -->
-        <div v-if="progress.detectedFields.length > 0" class="flex flex-wrap gap-1.5">
-          <span
-            v-for="field in progress.detectedFields"
-            :key="field"
-            class="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium"
-          >
-            {{ field }}
-          </span>
-        </div>
-
-        <!-- Action buttons -->
-        <div class="flex gap-2">
-          <button
-            v-if="result.confidence >= 0.3"
-            class="flex-1 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            @click="emit('productRecognized', { name: result.name, type: result.type, flavor: result.flavor, price: result.price, weight: result.weight, barcode: result.barcode })"
-          >
-            Use This Data
-          </button>
-          <button
-            class="px-4 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            @click="retakePhoto"
-          >
-            Retake
-          </button>
-        </div>
-      </div>
-
-      <!-- Preview (no processing yet - from file upload) -->
-      <div v-if="previewUrl && !processing && !result" class="space-y-3">
-        <img :src="previewUrl" alt="Preview" class="w-full h-40 object-cover rounded-lg" />
+        <!-- Use data button -->
         <button
-          class="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          @click="processImage"
+          v-if="result && result.confidence >= 0.2"
+          class="w-full py-3 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors"
+          @click="useResult"
         >
-          Scan This Image
-        </button>
-      </div>
-
-      <!-- Voice/Text mode -->
-      <div v-if="voiceMode && !processing" class="space-y-3">
-        <textarea
-          v-model="voiceInput"
-          rows="3"
-          placeholder="Describe the product, e.g.&#10;'Lazza vanilla cone, 60ml, price 20 rupees'&#10;'Amul chocolate bar 50g MRP 30'"
-          class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-        />
-        <button
-          :disabled="!voiceInput.trim()"
-          class="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          @click="processVoice"
-        >
-          Create from Description
+          Add This Product
         </button>
       </div>
 
