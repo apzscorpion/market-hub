@@ -70,9 +70,9 @@ function isActive(to: string): boolean {
           <Transition name="scale-fade">
             <span
               v-if="tab.to === '/retailer/cart' && cartStore.itemCount > 0"
-              class="absolute top-1 right-1/4 bg-blue-600 text-white text-[9px] rounded-full w-4.5 h-4.5 flex items-center justify-center font-bold leading-none shadow-md shadow-blue-500/30 bounce-in"
+              class="absolute -top-0.5 left-1/2 ml-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold leading-none shadow-md shadow-red-500/40 bounce-in px-1"
             >
-              {{ cartStore.itemCount > 9 ? '9+' : cartStore.itemCount }}
+              {{ cartStore.itemCount > 99 ? '99+' : cartStore.itemCount }}
             </span>
           </Transition>
         </NuxtLink>

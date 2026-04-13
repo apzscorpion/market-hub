@@ -65,15 +65,20 @@ function addToCart(): void {
 
       <!-- Add to cart / Quantity controls -->
       <div v-if="!isOutOfStock">
-        <div v-if="inCart" class="flex items-center justify-between">
-          <CommonQuantityControl
-            :quantity="cartItem!.quantity"
-            :min="0"
-            @update:quantity="(qty: number) => qty === 0 ? cartStore.removeItem(product.id) : cartStore.updateQuantity(product.id, qty)"
-          />
-          <span class="text-sm font-semibold text-blue-600 tabular-nums">
-            {{ formatPrice(cartItem!.quantity * product.price) }}
-          </span>
+        <div v-if="inCart" class="space-y-2">
+          <div class="flex items-center justify-between">
+            <CommonQuantityControl
+              :quantity="cartItem!.quantity"
+              :min="0"
+              @update:quantity="(qty: number) => qty === 0 ? cartStore.removeItem(product.id) : cartStore.updateQuantity(product.id, qty)"
+            />
+          </div>
+          <div class="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-1.5">
+            <span class="text-xs text-blue-500">{{ cartItem!.quantity }} x {{ formatPrice(product.price) }}</span>
+            <span class="text-sm font-bold text-blue-700 tabular-nums">
+              {{ formatPrice(cartItem!.quantity * product.price) }}
+            </span>
+          </div>
         </div>
         <button
           v-else
