@@ -17,7 +17,8 @@ export interface Invoice {
   orderId: string
   retailerId: string
   retailerName: string
-  retailerPhone: string
+  retailerEmail: string
+  retailerPhone?: string
   retailerAddress: string
   wholesalerName: string
   wholesalerAddress: string

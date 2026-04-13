@@ -69,7 +69,8 @@ async function markDelivered(orderId: string): Promise<void> {
 
           <div class="text-sm text-gray-700">
             <p class="font-medium">{{ order.retailerName }}</p>
-            <a :href="`tel:${order.retailerPhone}`" class="text-blue-600 text-xs">{{ order.retailerPhone }}</a>
+            <p class="text-xs text-gray-500">{{ order.retailerEmail }}</p>
+            <a v-if="order.retailerPhone" :href="`tel:${order.retailerPhone}`" class="text-blue-600 text-xs">{{ order.retailerPhone }}</a>
           </div>
 
           <div class="text-xs text-gray-500">

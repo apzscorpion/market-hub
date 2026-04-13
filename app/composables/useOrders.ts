@@ -37,7 +37,8 @@ export function useOrders() {
     const orderData = {
       retailerId: user.id,
       retailerName: user.name,
-      retailerPhone: user.phone,
+      retailerEmail: user.email || '',
+      ...(user.phone ? { retailerPhone: user.phone } : {}),
       items: orderItems,
       status: 'pending' as OrderStatus,
       totalAmount,

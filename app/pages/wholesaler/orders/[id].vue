@@ -99,7 +99,8 @@ onMounted(() => {
       <div class="bg-white rounded-lg border border-gray-200 p-6">
         <h3 class="text-sm font-semibold text-gray-700 mb-3">Retailer</h3>
         <p class="text-gray-900">{{ order.retailerName }}</p>
-        <a :href="`tel:${order.retailerPhone}`" class="text-sm text-blue-600 hover:underline">
+        <p class="text-sm text-gray-500">{{ order.retailerEmail }}</p>
+        <a v-if="order.retailerPhone" :href="`tel:${order.retailerPhone}`" class="text-sm text-blue-600 hover:underline">
           {{ order.retailerPhone }}
         </a>
       </div>

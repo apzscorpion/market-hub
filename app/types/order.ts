@@ -24,7 +24,8 @@ export interface Order {
   id: string
   retailerId: string
   retailerName: string
-  retailerPhone: string
+  retailerEmail: string
+  retailerPhone?: string
   items: OrderItem[]
   status: OrderStatus
   assignedDeliveryId?: string

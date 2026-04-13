@@ -40,7 +40,8 @@ defineProps<{
         <p class="text-xs font-semibold text-gray-500 uppercase mb-2">To</p>
         <p class="font-medium text-gray-900">{{ invoice.retailerName }}</p>
         <p v-if="invoice.retailerAddress" class="text-sm text-gray-600">{{ invoice.retailerAddress }}</p>
-        <p class="text-sm text-gray-600">{{ invoice.retailerPhone }}</p>
+        <p v-if="invoice.retailerEmail" class="text-sm text-gray-600">{{ invoice.retailerEmail }}</p>
+        <p v-if="invoice.retailerPhone" class="text-sm text-gray-600">{{ invoice.retailerPhone }}</p>
       </div>
     </div>
 
