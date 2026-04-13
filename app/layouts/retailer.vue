@@ -17,45 +17,64 @@ function isActive(to: string): boolean {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 pb-16">
-    <!-- Top header — slim, mobile-friendly -->
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-40">
-      <div class="px-4 py-2.5 flex items-center justify-between">
-        <h1 class="text-base font-semibold text-gray-900 truncate">{{ t('app.name') }}</h1>
-        <button class="text-xs text-gray-400 hover:text-gray-600 px-2 py-1" @click="logout">
+  <div class="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100/50 pb-20">
+    <!-- Top header -->
+    <header class="bg-white/80 backdrop-blur-lg border-b border-gray-200/60 sticky top-0 z-40">
+      <div class="px-4 py-3 flex items-center justify-between max-w-3xl mx-auto">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl gradient-primary flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+          </div>
+          <h1 class="text-base font-bold text-gray-900 tracking-tight">{{ t('app.name') }}</h1>
+        </div>
+        <button
+          class="text-xs text-gray-400 hover:text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-all duration-200"
+          @click="logout"
+        >
           {{ t('auth.logout') }}
         </button>
       </div>
     </header>
 
-    <!-- Page content -->
-    <main class="px-3 py-3 sm:px-4 sm:py-4 max-w-3xl mx-auto">
+    <!-- Page content with transition -->
+    <main class="px-3 py-4 sm:px-4 max-w-3xl mx-auto">
       <slot />
     </main>
 
-    <!-- Bottom tab bar — fixed -->
-    <nav class="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 z-40 safe-bottom">
-      <div class="flex items-stretch">
+    <!-- Bottom tab bar -->
+    <nav class="fixed bottom-0 inset-x-0 bg-white/90 backdrop-blur-lg border-t border-gray-200/60 z-40 safe-bottom">
+      <div class="flex items-stretch max-w-3xl mx-auto">
         <NuxtLink
           v-for="tab in tabs"
           :key="tab.to"
           :to="tab.to"
           :class="[
-            'flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] transition-colors relative',
-            isActive(tab.to) ? 'text-blue-600 font-semibold' : 'text-gray-400',
+            'flex-1 flex flex-col items-center justify-center py-2.5 gap-1 text-[10px] transition-all duration-200 relative',
+            isActive(tab.to)
+              ? 'text-blue-600 font-bold'
+              : 'text-gray-400 hover:text-gray-600',
           ]"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+          <!-- Active indicator dot -->
+          <div
+            v-if="isActive(tab.to)"
+            class="absolute top-0 left-1/2 -translate-x-1/2 w-5 h-0.5 bg-blue-600 rounded-full"
+          />
+          <svg class="w-5 h-5 transition-transform duration-200" :class="isActive(tab.to) && 'scale-110'" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
             <path stroke-linecap="round" stroke-linejoin="round" :d="tab.icon" />
           </svg>
           <span>{{ tab.label }}</span>
           <!-- Cart badge -->
-          <span
-            v-if="tab.to === '/retailer/cart' && cartStore.itemCount > 0"
-            class="absolute top-1 right-1/4 bg-blue-600 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none"
-          >
-            {{ cartStore.itemCount > 9 ? '9+' : cartStore.itemCount }}
-          </span>
+          <Transition name="scale-fade">
+            <span
+              v-if="tab.to === '/retailer/cart' && cartStore.itemCount > 0"
+              class="absolute top-1 right-1/4 bg-blue-600 text-white text-[9px] rounded-full w-4.5 h-4.5 flex items-center justify-center font-bold leading-none shadow-md shadow-blue-500/30 bounce-in"
+            >
+              {{ cartStore.itemCount > 9 ? '9+' : cartStore.itemCount }}
+            </span>
+          </Transition>
         </NuxtLink>
       </div>
     </nav>

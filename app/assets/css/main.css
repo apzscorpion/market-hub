@@ -1,3 +1,253 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  /* Glass card effect */
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-lg border border-white/20 shadow-lg;
+  }
+
+  /* Gradient backgrounds */
+  .gradient-primary {
+    @apply bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800;
+  }
+  .gradient-success {
+    @apply bg-gradient-to-br from-emerald-500 to-teal-600;
+  }
+  .gradient-purple {
+    @apply bg-gradient-to-br from-purple-600 to-indigo-700;
+  }
+  .gradient-warm {
+    @apply bg-gradient-to-br from-orange-400 to-rose-500;
+  }
+
+  /* Button styles */
+  .btn-primary {
+    @apply px-4 py-2.5 text-sm font-semibold text-white rounded-xl
+           bg-gradient-to-r from-blue-600 to-blue-700
+           hover:from-blue-700 hover:to-blue-800
+           active:scale-[0.98] transition-all duration-200
+           shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/30
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+  .btn-success {
+    @apply px-4 py-2.5 text-sm font-semibold text-white rounded-xl
+           bg-gradient-to-r from-emerald-500 to-emerald-600
+           hover:from-emerald-600 hover:to-emerald-700
+           active:scale-[0.98] transition-all duration-200
+           shadow-md shadow-emerald-500/25
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-danger {
+    @apply px-4 py-2.5 text-sm font-semibold text-white rounded-xl
+           bg-gradient-to-r from-red-500 to-red-600
+           hover:from-red-600 hover:to-red-700
+           active:scale-[0.98] transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-outline {
+    @apply px-4 py-2.5 text-sm font-medium text-gray-700 rounded-xl
+           border border-gray-200 bg-white
+           hover:bg-gray-50 hover:border-gray-300
+           active:scale-[0.98] transition-all duration-200;
+  }
+
+  /* Card styles */
+  .card {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-sm
+           hover:shadow-md transition-shadow duration-300;
+  }
+  .card-flat {
+    @apply bg-white rounded-xl border border-gray-100;
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply rounded-2xl p-4 text-white shadow-lg;
+  }
+
+  /* Input styles */
+  .input {
+    @apply w-full px-4 py-3 text-sm border border-gray-200 rounded-xl
+           bg-gray-50/50 placeholder-gray-400
+           focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400
+           focus:bg-white transition-all duration-200;
+  }
+  .input-sm {
+    @apply w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+           bg-gray-50/50 placeholder-gray-400
+           focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400
+           focus:bg-white transition-all duration-200;
+  }
+
+  /* Badge */
+  .badge {
+    @apply text-[10px] px-2 py-0.5 rounded-full font-semibold tracking-wide uppercase;
+  }
+}
+
+@layer utilities {
+  /* Safe area padding for mobile */
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Page transitions */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* Layout transitions */
+.layout-enter-active,
+.layout-leave-active {
+  transition: opacity 0.15s ease;
+}
+.layout-enter-from,
+.layout-leave-to {
+  opacity: 0;
+}
+
+/* Fade animations */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Slide up animation */
+.slide-up-enter-active {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-up-leave-active {
+  transition: all 0.2s ease;
+}
+.slide-up-enter-from {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* Scale fade animation */
+.scale-fade-enter-active {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scale-fade-leave-active {
+  transition: all 0.15s ease;
+}
+.scale-fade-enter-from {
+  opacity: 0;
+  transform: scale(0.95);
+}
+.scale-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+/* Staggered list animation */
+.list-enter-active {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.list-leave-active {
+  transition: all 0.2s ease;
+}
+.list-enter-from {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+.list-leave-to {
+  opacity: 0;
+  transform: translateX(12px);
+}
+.list-move {
+  transition: transform 0.3s ease;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* Pulse ring for mic button */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.pulse-ring {
+  animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* Bounce in animation */
+@keyframes bounce-in {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.bounce-in {
+  animation: bounce-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Count animation */
+@keyframes count-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+.count-pop {
+  animation: count-pop 0.2s ease;
+}
+
+/* Smooth number scroll */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

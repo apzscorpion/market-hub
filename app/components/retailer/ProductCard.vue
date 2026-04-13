@@ -9,66 +9,91 @@ const cartStore = useCartStore()
 const cartItem = computed(() => cartStore.getItem(props.product.id))
 const inCart = computed(() => !!cartItem.value)
 const isOutOfStock = computed(() => props.product.stock.quantity <= 0)
+const justAdded = ref(false)
 
 function formatPrice(price: number): string {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(price)
 }
+
+function addToCart(): void {
+  cartStore.addItem(props.product)
+  justAdded.value = true
+  setTimeout(() => { justAdded.value = false }, 600)
+}
 </script>
 
 <template>
-  <div class="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-    <!-- Image placeholder -->
-    <div class="h-32 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+  <div class="card overflow-hidden group">
+    <!-- Image -->
+    <div class="h-36 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center relative overflow-hidden">
       <img
         v-if="product.images.length > 0"
         :src="product.images[0]"
         :alt="product.name"
-        class="h-full w-full object-cover"
+        class="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
       >
-      <svg v-else class="w-12 h-12 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
+      <div v-else class="flex flex-col items-center gap-1">
+        <svg class="w-10 h-10 text-blue-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      </div>
+
+      <!-- Badges -->
+      <div v-if="product.badges.isNew || product.badges.isTrending" class="absolute top-2 left-2 flex gap-1">
+        <span v-if="product.badges.isNew" class="badge bg-emerald-500 text-white shadow-sm">New</span>
+        <span v-if="product.badges.isTrending" class="badge bg-orange-500 text-white shadow-sm">Hot</span>
+      </div>
+
+      <!-- Out of stock overlay -->
+      <div v-if="isOutOfStock" class="absolute inset-0 bg-gray-900/40 flex items-center justify-center">
+        <span class="text-white text-xs font-bold bg-red-500 px-3 py-1 rounded-full">Out of Stock</span>
+      </div>
     </div>
 
-    <div class="p-3">
-      <!-- Badges -->
-      <div v-if="product.badges.isNew || product.badges.isTrending || product.badges.isRecommended" class="flex gap-1 mb-1">
-        <span v-if="product.badges.isNew" class="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">New</span>
-        <span v-if="product.badges.isTrending" class="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium">Trending</span>
-        <span v-if="product.badges.isRecommended" class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">Recommended</span>
+    <div class="p-3 space-y-2">
+      <div>
+        <h3 class="font-semibold text-sm text-gray-900 line-clamp-1">{{ product.nickname || product.name }}</h3>
+        <p class="text-[11px] text-gray-400 line-clamp-1">{{ product.name }}</p>
       </div>
 
-      <h3 class="font-medium text-sm text-gray-900 line-clamp-1">{{ product.nickname || product.name }}</h3>
-      <p class="text-xs text-gray-500 line-clamp-1">{{ product.name }}</p>
-
-      <div class="mt-2 flex items-center justify-between">
-        <span class="text-sm font-semibold text-gray-900">
-          {{ formatPrice(product.price) }}
-          <span class="text-xs font-normal text-gray-500">/ {{ product.unitType }}</span>
-        </span>
-      </div>
-
-      <!-- Out of stock -->
-      <div v-if="isOutOfStock" class="mt-2">
-        <span class="text-xs text-red-600 font-medium">Out of Stock</span>
+      <div class="flex items-end justify-between">
+        <div>
+          <span class="text-lg font-bold text-gray-900 tabular-nums">{{ formatPrice(product.price) }}</span>
+          <span class="text-[10px] text-gray-400 ml-0.5">/ {{ product.unitType }}</span>
+        </div>
       </div>
 
       <!-- Add to cart / Quantity controls -->
-      <div v-else class="mt-2">
+      <div v-if="!isOutOfStock">
         <div v-if="inCart" class="flex items-center justify-between">
           <CommonQuantityControl
             :quantity="cartItem!.quantity"
             :min="0"
             @update:quantity="(qty: number) => qty === 0 ? cartStore.removeItem(product.id) : cartStore.updateQuantity(product.id, qty)"
           />
-          <span class="text-xs text-gray-500">{{ formatPrice(cartItem!.quantity * product.price) }}</span>
+          <span class="text-sm font-semibold text-blue-600 tabular-nums">
+            {{ formatPrice(cartItem!.quantity * product.price) }}
+          </span>
         </div>
         <button
           v-else
-          class="w-full py-1.5 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
-          @click="cartStore.addItem(product)"
+          :class="[
+            'w-full py-2.5 text-sm font-semibold rounded-xl transition-all duration-300',
+            justAdded
+              ? 'bg-emerald-500 text-white scale-95'
+              : 'text-blue-600 bg-blue-50 hover:bg-blue-100 active:scale-95',
+          ]"
+          @click="addToCart"
         >
-          Add to Cart
+          <Transition name="fade" mode="out-in">
+            <span v-if="justAdded" class="inline-flex items-center gap-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+              </svg>
+              Added!
+            </span>
+            <span v-else>Add to Cart</span>
+          </Transition>
         </button>
       </div>
     </div>
