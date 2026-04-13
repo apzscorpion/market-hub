@@ -1,7 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app'
 import { getAuth, connectAuthEmulator } from 'firebase/auth'
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'
-import { getStorage, connectStorageEmulator } from 'firebase/storage'
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from 'firebase/firestore'
 
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig()
@@ -17,14 +16,23 @@ export default defineNuxtPlugin(() => {
 
   const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
   const auth = getAuth(app)
-  const db = getFirestore(app)
-  const storage = getStorage(app)
+
+  let db
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    })
+  }
+  catch {
+    // Already initialized (e.g. HMR), get existing instance
+    const { getFirestore } = require('firebase/firestore')
+    db = getFirestore(app)
+  }
 
   if (import.meta.dev) {
     try {
       connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
       connectFirestoreEmulator(db, 'localhost', 8080)
-      connectStorageEmulator(storage, 'localhost', 9199)
     }
     catch {
       // Emulators already connected
@@ -36,7 +44,6 @@ export default defineNuxtPlugin(() => {
       firebaseApp: app,
       firebaseAuth: auth,
       firebaseDb: db,
-      firebaseStorage: storage,
     },
   }
 })

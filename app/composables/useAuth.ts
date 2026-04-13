@@ -1,10 +1,15 @@
-import { onAuthStateChanged, signInWithPhoneNumber, signOut, RecaptchaVerifier } from 'firebase/auth'
-import type { ConfirmationResult } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+} from 'firebase/auth'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import type { User } from '~/types/user'
 
-let confirmationResult: ConfirmationResult | null = null
-let recaptchaVerifier: RecaptchaVerifier | null = null
+const googleProvider = new GoogleAuthProvider()
 
 export function useAuth() {
   const { $firebaseAuth, $firebaseDb } = useNuxtApp()
@@ -16,30 +21,39 @@ export function useAuth() {
     return { id: userDoc.id, ...userDoc.data() } as User
   }
 
-  function initRecaptcha(elementId: string): void {
-    if (recaptchaVerifier) return
-    recaptchaVerifier = new RecaptchaVerifier($firebaseAuth, elementId, {
-      size: 'invisible',
-    })
-  }
-
-  async function sendOtp(phoneNumber: string): Promise<void> {
-    if (!recaptchaVerifier) {
-      initRecaptcha('recaptcha-container')
-    }
-    confirmationResult = await signInWithPhoneNumber(
-      $firebaseAuth,
-      phoneNumber,
-      recaptchaVerifier!,
-    )
-  }
-
-  async function verifyOtp(code: string): Promise<User | null> {
-    if (!confirmationResult) {
-      throw new Error('No OTP was sent. Please request a new OTP.')
-    }
-    const credential = await confirmationResult.confirm(code)
+  async function loginWithEmail(email: string, password: string): Promise<User | null> {
+    const credential = await signInWithEmailAndPassword($firebaseAuth, email, password)
     const profile = await fetchUserProfile(credential.user.uid)
+    authStore.setUser(profile)
+    return profile
+  }
+
+  async function registerWithEmail(email: string, password: string): Promise<User | null> {
+    const credential = await createUserWithEmailAndPassword($firebaseAuth, email, password)
+    const profile = await fetchUserProfile(credential.user.uid)
+    authStore.setUser(profile)
+    return profile
+  }
+
+  async function loginWithGoogle(): Promise<User | null> {
+    const credential = await signInWithPopup($firebaseAuth, googleProvider)
+    let profile = await fetchUserProfile(credential.user.uid)
+
+    // Auto-create profile for Google sign-in users if they don't have one
+    if (!profile && credential.user.email) {
+      const newUser: Omit<User, 'id'> = {
+        name: credential.user.displayName || credential.user.email,
+        email: credential.user.email,
+        role: 'retailer',
+        active: true,
+        preferredLanguage: 'en',
+        createdAt: serverTimestamp() as any,
+        updatedAt: serverTimestamp() as any,
+      }
+      await setDoc(doc($firebaseDb, 'users', credential.user.uid), newUser)
+      profile = { id: credential.user.uid, ...newUser }
+    }
+
     authStore.setUser(profile)
     return profile
   }
@@ -47,8 +61,6 @@ export function useAuth() {
   async function logout(): Promise<void> {
     await signOut($firebaseAuth)
     authStore.clear()
-    confirmationResult = null
-    recaptchaVerifier = null
     await navigateTo('/login')
   }
 
@@ -84,8 +96,9 @@ export function useAuth() {
     isWholesaler: computed(() => authStore.isWholesaler),
     isDelivery: computed(() => authStore.isDelivery),
     isAuthenticated: computed(() => authStore.isAuthenticated),
-    sendOtp,
-    verifyOtp,
+    loginWithEmail,
+    registerWithEmail,
+    loginWithGoogle,
     logout,
     initAuthListener,
     fetchUserProfile,

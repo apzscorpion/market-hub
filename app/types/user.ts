@@ -5,12 +5,13 @@ export type UserRole = 'retailer' | 'wholesaler' | 'delivery'
 export interface User {
   id: string
   name: string
-  phone: string
+  email: string
+  phone?: string
   role: UserRole
   active: boolean
   address?: string
-  fcmTokens: string[]
+  fcmTokens?: string[]
   preferredLanguage: 'en' | 'ml'
-  createdAt: Timestamp
-  updatedAt: Timestamp
+  createdAt: Timestamp | any
+  updatedAt: Timestamp | any
 }
