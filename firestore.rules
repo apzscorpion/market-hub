@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isWholesaler() {
+      return isSignedIn() && getUserRole() == 'wholesaler';
+    }
+
+    function isRetailer() {
+      return isSignedIn() && getUserRole() == 'retailer';
+    }
+
+    function isDelivery() {
+      return isSignedIn() && getUserRole() == 'delivery';
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow read, write: if isWholesaler();
+    }
+
+    // Products collection
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow write: if isWholesaler();
+    }
+
+    // Categories collection
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow write: if isWholesaler();
+    }
+
+    // Classification options (single config document)
+    match /classificationOptions/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isWholesaler();
+    }
+
+    // Orders collection
+    match /orders/{orderId} {
+      // Read: own orders, wholesaler sees all, delivery sees assigned
+      allow read: if isSignedIn() &&
+        (resource.data.retailerId == request.auth.uid ||
+         isWholesaler() ||
+         resource.data.assignedDeliveryId == request.auth.uid);
+
+      // Create: retailers can create their own orders
+      allow create: if isRetailer() &&
+        request.resource.data.retailerId == request.auth.uid;
+
+      // Update: retailer can edit own pending orders
+      allow update: if isRetailer() &&
+        resource.data.retailerId == request.auth.uid &&
+        resource.data.status == 'pending';
+
+      // Update: wholesaler can update any order
+      allow update: if isWholesaler();
+
+      // Update: delivery can update assigned orders
+      allow update: if isDelivery() &&
+        resource.data.assignedDeliveryId == request.auth.uid;
+    }
+
+    // Invoices collection
+    match /invoices/{invoiceId} {
+      allow read: if isSignedIn() &&
+        (resource.data.retailerId == request.auth.uid || isWholesaler());
+      allow write: if isWholesaler();
+    }
+
+    // Retailer stats (computed cache)
+    match /retailerStats/{retailerId} {
+      allow read: if isSignedIn() &&
+        (request.auth.uid == retailerId || isWholesaler());
+      allow write: if isWholesaler();
+    }
+
+    // Activity logs
+    match /activityLogs/{logId} {
+      allow read: if isWholesaler();
+      allow create: if isSignedIn();
+    }
+
+    // Voice logs
+    match /voiceLogs/{logId} {
+      allow read: if isSignedIn() &&
+        (resource.data.userId == request.auth.uid || isWholesaler());
+      allow create: if isSignedIn();
+    }
+
+    // System settings
+    match /systemSettings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isWholesaler();
+    }
+  }
+}

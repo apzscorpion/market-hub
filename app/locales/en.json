@@ -1,0 +1,57 @@
+{
+  "app": {
+    "name": "Wholesale Deal Hub",
+    "loading": "Loading..."
+  },
+  "auth": {
+    "login": "Login",
+    "phone": "Phone Number",
+    "otp": "Enter OTP",
+    "send_otp": "Send OTP",
+    "verify": "Verify",
+    "change_phone": "Change phone number",
+    "logout": "Logout",
+    "no_account": "Contact your wholesaler to get access."
+  },
+  "nav": {
+    "products": "Products",
+    "orders": "Orders",
+    "cart": "New Order",
+    "dashboard": "Dashboard",
+    "users": "Users",
+    "history": "History",
+    "settings": "Settings"
+  },
+  "order": {
+    "status": {
+      "pending": "Pending",
+      "accepted": "Accepted",
+      "shipped": "Shipped",
+      "delivered": "Delivered",
+      "cancelled": "Cancelled"
+    },
+    "place": "Place Order",
+    "cancel": "Cancel Order",
+    "total": "Total",
+    "notes": "Notes"
+  },
+  "product": {
+    "name": "Product Name",
+    "price": "Price",
+    "stock": "Stock",
+    "quantity": "Quantity",
+    "unit": "Unit",
+    "out_of_stock": "Out of Stock",
+    "add": "Add Product"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "search": "Search",
+    "no_results": "No results found",
+    "loading": "Loading...",
+    "error": "Something went wrong"
+  }
+}
