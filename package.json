@@ -13,7 +13,8 @@
     "cap:build": "nuxt generate && npx cap sync",
     "cap:android": "nuxt generate && npx cap sync android && npx cap open android",
     "cap:ios": "nuxt generate && npx cap sync ios && npx cap open ios",
-    "cap:sync": "npx cap sync"
+    "cap:sync": "npx cap sync",
+    "cap:apk": "bash scripts/build-apk.sh"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.0",
